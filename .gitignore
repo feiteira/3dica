@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output (app in dist/, manual in dist/manual/)
+dist/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+**/.vitepress/cache/
+**/.vitepress/dist/
+.vite/
+
+# test output
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# logs and OS files
+*.log
+.DS_Store

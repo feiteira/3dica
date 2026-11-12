@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "3dica": {
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "name": "3dica",
+  "version": "0.1.0",
+  "description": "A browser code-CAD workbench with linked components: JSCAD objects in a tree, a 3D view you can click and drag in, and live linked copies.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "The 3Dica authors",
+  "homepage": "https://feiteira.github.io/3dica/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/feiteira/3dica.git"
+  },
+  "bugs": {
+    "url": "https://github.com/feiteira/3dica/issues"
+  },
+  "keywords": [
+    "cad",
+    "code-cad",
+    "openscad",
+    "jscad",
+    "openjscad",
+    "three.js",
+    "3d",
+    "parametric",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p . && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:preview": "npm run build && PW_PREVIEW=1 playwright test",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e",
+    "docs:dev": "vitepress dev docs --port 5180",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --port 4180",
+    "docs:shots": "playwright test -c playwright.docs.config.ts",
+    "build:site": "npm run build && npm run docs:build",
+    "mcp": "node mcp/server.mjs"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "6.2.5",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@jscad/modeling": "2.13.0",
+    "@jscad/stl-serializer": "2.1.23",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "codemirror": "6.0.2",
+    "three": "0.187.0",
+    "ws": "8.22.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/three": "0.187.0",
+    "@types/ws": "8.18.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitepress": "1.6.4",
+    "vitest": "4.1.12"
+  }
+}

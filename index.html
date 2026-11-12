@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3Dica — code-CAD with linked components</title>
+    <meta name="description" content="3Dica is a browser code-CAD workbench: JSCAD objects in a tree, a 3D view you can click and drag in, and live linked copies." />
+    <meta name="theme-color" content="#1f2329" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta property="og:title" content="3Dica — code-CAD with linked components" />
+    <meta property="og:description" content="JSCAD objects in a tree, a clickable 3D view with gizmos, and live linked copies. Runs entirely in your browser." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://feiteira.github.io/3dica/" />
+    <meta property="og:image" content="https://feiteira.github.io/3dica/manual/shots/overview.png" />
+    <meta property="og:site_name" content="3Dica" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="toolbar"></header>
+      <aside id="left">
+        <section id="tree"></section>
+        <section id="library"></section>
+      </aside>
+      <main id="view"></main>
+      <aside id="inspector"></aside>
+      <footer id="status"></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

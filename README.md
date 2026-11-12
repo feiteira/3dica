@@ -1,0 +1,151 @@
+# 3Dica
+
+[![CI](https://github.com/feiteira/3dica/actions/workflows/ci.yml/badge.svg)](https://github.com/feiteira/3dica/actions/workflows/ci.yml)
+[![Pages](https://github.com/feiteira/3dica/actions/workflows/pages.yml/badge.svg)](https://github.com/feiteira/3dica/actions/workflows/pages.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**A browser code-CAD workbench with linked components.**
+
+**[Open the app](https://feiteira.github.io/3dica/)** · **[Read the manual](https://feiteira.github.io/3dica/manual/)**
+
+![3Dica with the "Bracket kit" sample: scene tree and library on the left, the 3D view in the middle, the inspector and code editor on the right](docs/public/shots/overview.png)
+
+If you like OpenSCAD or OpenJSCAD but want to point at the thing you are building, 3Dica is for you. Every object is a
+named [JSCAD](https://github.com/jscad/OpenJSCAD.org) definition with its own code and parameters. You place definitions
+in an object tree as **linked instances**: change the definition once and every copy follows. Click any object in the 3D
+view to select it, press <kbd>I</kbd> to isolate it, and move, rotate or scale it with a gizmo. The code stays the source of
+truth for shape, and the tree holds placement. Everything runs in your browser. There is no account and no server.
+
+## Features
+
+- **Code objects.** Each object's code is a JSCAD function body. The functions of the main `@jscad/modeling` namespaces
+  (`cuboid`, `cylinder`, `union`, `subtract`, `translate`, `extrudeLinear`, …) are in scope by their plain names, and the
+  whole library is available as `jscad`. Parameters have defaults, min/max/step hints and per-instance overrides.
+- **Linked copies.** <kbd>Ctrl</kbd>+<kbd>D</kbd> adds another instance of the *same* definition. A `◆N` badge and a purple
+  tint in the view show what is linked. **Make unique** (<kbd>U</kbd>) breaks the link one level deep.
+- **Groups and booleans.** Groups are assemblies, or `union` / `subtract` / `intersect` operations. When you select a
+  boolean, its operands are shown, with subtract cutters as translucent red.
+- **`part('Name', overrides)`.** Code can use another definition's geometry, like calling an OpenSCAD module. A rename
+  rewrites the calls, and a delete is refused while code still uses the definition.
+- **Click, drill down, isolate.** Click selects the outermost object, <kbd>Ctrl</kbd>+click the deepest part, and
+  double-click enters a group. Everything else is ghosted, and Isolate shows a definition alone at the origin.
+- **Gizmos and drag and drop.** Move, rotate and scale in world or local space with snapping (1 mm / 15° / 0.1). Drag
+  rows in the tree to reparent, and the world position is kept.
+- **OpenSCAD conventions.** Millimetres, Z up, and `rotate([x, y, z])` order.
+- **Fast and safe evaluation.** Code runs in a Web Worker. Results are cached by content hash, so the 8 bolts of the
+  sample share one mesh, and the last good mesh stays on screen while you type. A runaway `while (true)` is stopped
+  after 20 s, or about 1 s after you type over it. Geometry that would run the tab out of memory is refused.
+- **Files.** Undo and redo, autosave with 5 backups, `.3dica.json` save and open, and binary STL export. Opening a file
+  that contains code asks before running it.
+- **AI assistants.** A local [MCP](https://modelcontextprotocol.io) server lets an assistant drive a running 3Dica and
+  take screenshots.
+
+## Quick start
+
+You need [Node.js](https://nodejs.org) 20.19 or newer (22 LTS recommended) and git.
+
+```sh
+git clone https://github.com/feiteira/3dica.git
+cd 3dica
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. Add `?fresh` to the URL to start from the sample project and ignore the autosave.
+
+New to the app? Start with [Getting started](https://feiteira.github.io/3dica/manual/guide/getting-started.html) and the
+[tutorials](https://feiteira.github.io/3dica/manual/tutorials/first-part.html) in the manual.
+
+## Use it with an AI assistant (MCP)
+
+`mcp/server.mjs` is a [Model Context Protocol](https://modelcontextprotocol.io) server for a 3Dica that runs on your own
+machine. An assistant such as Claude Code can use it to read and change the open project and to take screenshots of the
+view. It is opt-in, and the bridge between the server and the browser tab listens on `localhost` only.
+
+The repository includes a `.mcp.json`, so Claude Code offers the server when you open this folder. To register it by
+hand:
+
+```sh
+claude mcp add 3dica -- node /path/to/3dica/mcp/server.mjs
+```
+
+Setup, the list of tools and the security notes are in the manual:
+[AI assistants (MCP)](https://feiteira.github.io/3dica/manual/guide/mcp.html).
+
+## Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | Vite dev server on <http://localhost:5173> |
+| `npm run build` | Type-check, then build the app into `dist/` |
+| `npm run preview` | Serve the production build on <http://localhost:4173> |
+| `npm test` | Unit tests (vitest, Node environment) |
+| `npm run test:e2e` | Playwright end-to-end tests against the dev server |
+| `npm run test:e2e:preview` | Production build plus `vite preview`, then the same end-to-end tests |
+| `npm run typecheck` | `tsc` in strict mode |
+| `npm run docs:dev` | The manual (VitePress) with live reload on <http://localhost:5180/3dica/manual/> |
+| `npm run docs:build` | Build the manual into `dist/manual/` |
+| `npm run docs:shots` | Regenerate the manual's screenshots in `docs/public/shots/` (Playwright, own dev server on port 5721) |
+| `npm run build:site` | `build` and then `docs:build`: the whole GitHub Pages site in `dist/` |
+| `npm run mcp` | Start the MCP server (`mcp/server.mjs`) |
+
+`npm run test:watch`, `npm run docs:preview` and `npm run test:all` (typecheck, unit and e2e) are there too.
+
+## Testing
+
+```sh
+npm run typecheck
+npm test
+npx playwright install chromium   # once per machine: the browser build that matches @playwright/test
+npm run test:e2e
+```
+
+- `npx playwright install chromium` is needed once on a new machine. On a fresh Linux box, use
+  `npx playwright install --with-deps chromium` to get the system libraries too.
+- Keep `@playwright/test` at the exact version in `package.json`. Each Playwright release expects its own browser build.
+- `PW_PORT=<port>` runs the e2e server on another port (the defaults are 5173 for dev and 4173 for preview).
+- Pages expose a small test API as `window.__3dica` (`ready`, `idle()`, `stats()`, `defStatus(name)`, `objectPixels()`,
+  …). See `src/main.ts`. The URL parameter `?evalTimeout=<ms>` shortens the runaway-code timeout.
+
+## Project layout
+
+```text
+src/
+  core/      pure logic: types, graph expansion, ops, hashing, eval specs, selection rules (unit-tested)
+  state/     store with undo, clipboard, autosave, other-tab detection
+  eval/      worker protocol, engine, worker, client, mesh cache
+  view/      three.js viewport, scene sync, materials, picking, gizmo
+  ui/        panels, code editor, shortcuts
+  app/       commands, controller and the cross-layer contract (context.ts)
+  io/        downloads, file picking, window drop
+  main.ts    boot
+tests/
+  unit/      vitest
+  e2e/       Playwright
+  docs/      the manual's screenshot generator (npm run docs:shots)
+docs/        the manual (VitePress); docs/design/ holds the historical v0.1 design spec
+mcp/         the local MCP server
+public/      static files (favicon)
+```
+
+`src/app/context.ts` is the best place to start reading the code. The
+[architecture page](https://feiteira.github.io/3dica/manual/dev/architecture.html) explains how the pieces fit together.
+`docs/design/spec-v0.1.md` is the original design spec. The `§` references in code comments point to its sections, and
+where it and the code differ, the code wins.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. To report a security
+issue, see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 The 3Dica authors
+
+## Acknowledgements
+
+3Dica is built on [three.js](https://threejs.org), [JSCAD](https://github.com/jscad/OpenJSCAD.org)
+(`@jscad/modeling`, `@jscad/stl-serializer`), [CodeMirror](https://codemirror.net),
+[VitePress](https://vitepress.dev) and the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk),
+and it is built and tested with [Vite](https://vite.dev), [Vitest](https://vitest.dev) and
+[Playwright](https://playwright.dev). It owes its ideas to [OpenSCAD](https://openscad.org).
