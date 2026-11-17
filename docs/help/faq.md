@@ -11,14 +11,18 @@ work.
 ### Do I need to install anything?
 
 No. Open [feiteira.github.io/3dica](https://feiteira.github.io/3dica/) in a desktop browser. A local copy is only
-needed if you want to change 3Dica itself or connect an AI assistant: see [Contributing](/dev/contributing) and
-[AI assistants (MCP)](/guide/mcp).
+needed if you want to change 3Dica itself or connect your own AI assistant over MCP: see
+[Contributing](/dev/contributing) and [AI assistants (MCP)](/guide/mcp). The [AI chat](/guide/ai-chat) works without
+one.
 
 ### Is my model uploaded anywhere?
 
 No. 3Dica is a static web page. Your project is evaluated in your browser, autosaved in the browser's local storage, and
 saved or exported as files that your browser downloads. Nothing is sent to a server. See
 [Files, autosave and STL](/reference/files).
+
+The one exception is the [AI chat](/guide/ai-chat), and only while you use it: what the assistant reads (scene data,
+code, screenshots) goes from your browser to the AI provider you chose. 3Dica has no server in between.
 
 ### Which browsers work?
 
@@ -104,8 +108,31 @@ There is no offline install. If you need it without a network connection, run a 
 
 ### Can an AI assistant use 3Dica?
 
-Yes, with a local copy. 3Dica includes an MCP server that lets an assistant such as Claude read and edit the open
-project and take screenshots of the view. See [AI assistants (MCP)](/guide/mcp).
+Yes, in two ways. The [AI chat](/guide/ai-chat) in the right column (<kbd>Ctrl</kbd>+<kbd>L</kbd>) works everywhere,
+also on the hosted app: paste an API key and ask. With a local copy, an assistant such as Claude Code can also drive
+3Dica through its MCP server. See [AI assistants (MCP)](/guide/mcp), and
+[Chat or MCP?](/guide/ai-chat#chat-or-mcp) for the difference.
+
+### Which AI models work best?
+
+Models that are good at **tool calling** and can **read images**. The assistant works in many small steps: it calls a
+tool, reads the result, takes a screenshot and checks it against what you asked. Large current models from the big
+providers do this well, for example the Claude models (the chat's default is `claude-opus-5-5`), and you can reach
+many of them with one key through OpenRouter. Small local models are free to run, but they often call tools wrongly
+or not at all, and many can't read images: turn off **Send screenshots as images** for those. Try a simple request
+first, such as *make a 20 mm cube*, before you rely on a model for real work.
+
+### Do I need to pay for the AI chat?
+
+3Dica is free. The AI provider bills you for what the model reads and writes, at their prices, so you need an API key
+with credit. A chat subscription such as Claude.ai or ChatGPT does not include API use. Local models (Ollama,
+LM Studio) cost nothing per message. See [Costs](/guide/ai-chat#costs).
+
+### Is my API key safe?
+
+It stays in your browser and goes only to the provider you chose. With **Remember the key in this browser** off, as
+it starts, it is gone when you close the tab. Read [Privacy and your key](/guide/ai-chat#privacy-and-your-key) for where it is
+kept and who else can read browser storage.
 
 ### Does 3Dica use the GPU for modeling?
 
@@ -147,6 +174,15 @@ These are the known limits of v0.1.
   let go.
 - **Desktop only.** Tested with Chromium, at least 1,100 pixels wide, mouse and keyboard, dark theme only.
 - **No project rename field.** The name comes from the file: edit `"name"` in the `.3dica.json`.
+
+**AI chat**
+
+- **The conversation is not saved.** A reload, **New chat**, or a change of provider, model, key or effort starts
+  over.
+- **Text only from you.** You can't attach images or files to a message. The assistant sees the model through its
+  own screenshots.
+- **No files.** The assistant downloads project files and STL exports, but can't open or read files.
+- **Your key, your bill.** There is no built-in model: you need an API key from a provider, or a local model.
 
 **Files**
 

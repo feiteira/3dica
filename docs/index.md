@@ -45,10 +45,10 @@ features:
     details: "A code object is a function body that uses @jscad/modeling: cuboid, cylinder, subtract, extrudeLinear and the rest. Call part('Bolt', { length: 20 }) to reuse another object, like an OpenSCAD module."
     link: /reference/code-api
     linkText: Code API
-  - title: Runs in your browser, works with AI
-    details: There's nothing to install and no account. Code runs in a Web Worker and the project autosaves in your browser. Run 3Dica locally and an AI assistant can drive it and take screenshots over MCP.
-    link: /guide/mcp
-    linkText: AI assistants (MCP)
+  - title: Runs in your browser, builds with AI
+    details: There's nothing to install and no account, and the project autosaves in your browser. Ask the Chat tab (Ctrl+L) for a part or a change, with your own key for Anthropic, OpenAI, OpenRouter and others, or a local model. Every AI change is one undo step. Locally, your own assistant can drive 3Dica over MCP.
+    link: /guide/ai-chat
+    linkText: AI chat
 ---
 
 <style>

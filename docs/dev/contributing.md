@@ -52,7 +52,8 @@ npm run dev                       # http://localhost:5173
 
 `tests/unit/*.test.ts` run in Node with vitest and the real JSCAD library: the pure core (graph expansion, ops,
 specs and keys, hashing, the file format, selection rules, transforms), the evaluation engine, the client with a fake
-worker, the store and history, autosave, the controller, picking, and the MCP server and its handlers.
+worker, the store and history, autosave, the controller, picking, the MCP server and its handlers, and the AI chat's
+loop, tools, settings and provider adapters.
 
 ```sh
 npm test
@@ -66,8 +67,8 @@ or browser dependencies, you can also use a throwaway test to try JSCAD code: `c
 ### End-to-end tests
 
 `tests/e2e/*.spec.ts` drive the real app in Chromium. `app.spec.ts` holds the main scenarios, `fixes.spec.ts` the
-regressions and `mcp.spec.ts` the MCP server talking to a real tab. Each test boots `/?fresh`, waits for
-`window.__3dica.ready` and `idle()`, and fails if the page logs an error.
+regressions, `mcp.spec.ts` the MCP server talking to a real tab and `chat.spec.ts` the AI chat. Each test boots
+`/?fresh`, waits for `window.__3dica.ready` and `idle()`, and fails if the page logs an error.
 
 ```sh
 npm run test:e2e
@@ -82,6 +83,24 @@ npx playwright test -g "STL export"   # one scenario by name
 - Add a scenario for every user-visible fix.
 - Run `npm run test:e2e:preview` too when you touch the build, the worker or anything path-related.
 
+### Testing the AI chat without a key
+
+The chat's tests never call a real model and need no API key. Don't add a test that does: it would cost money, need
+a secret, and give a different answer on every run.
+
+- **Unit tests** (`tests/unit/agent-*.test.ts`, `providers-*.test.ts`) drive the `ChatController` with a fake
+  session and fake tools, run the real tools against a real store with a fake evaluator
+  (`tests/unit/agent-fixtures.ts`), and test each provider adapter with a mocked `fetch` that returns recorded-shape
+  streams.
+- **End to end** (`tests/e2e/chat.spec.ts`), `page.route` answers `https://api.anthropic.com` and an
+  OpenAI-compatible `https://mock.example/v1` with Server-Sent Events, the way the real APIs stream. The model's tool
+  calls then run through the real loop on the real app, so a test can check the scene, the undo labels, and every
+  request body that went over the wire (including that no request contains the key).
+- To script a conversation, give the mock one reply per request: text, tool calls, a stop reason. The next request
+  carries the tool results, so you can assert on them before you answer.
+
+To try the chat by hand with a real provider, use your own key in the app. It stays in your browser.
+
 ### Manual screenshots
 
 `npm run docs:shots` runs `tests/docs/*.spec.ts` with `playwright.docs.config.ts`. These scripts perform the manual's
@@ -90,6 +109,8 @@ tutorials and reference views through the real UI (clicks, keys and drags) and w
 
 - The run starts its own dev server on port 5721 (`PW_PORT` changes it), without hot reload, so editing files during a
   run cannot reload the page in the middle of a sequence.
+- The chat shots (`tests/docs/chat.spec.ts`) use a mocked Anthropic API (`tests/docs/mock-anthropic.ts`) with fixed
+  replies, so they come out the same every time and need no key.
 - Regenerate the shots when a change alters what the UI looks like, and look at the result before you commit.
 
 ## The manual

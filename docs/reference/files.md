@@ -2,7 +2,8 @@
 
 3Dica keeps your work in three ways: an **autosave** in the browser, project files you **save** and **open**
 (`.3dica.json`), and **STL** exports for slicers and other CAD tools. Everything happens in your browser. Nothing is
-uploaded anywhere.
+uploaded anywhere, unless you use the [AI chat](/guide/ai-chat): it sends what the assistant reads to the AI
+provider you chose.
 
 ## Autosave
 
@@ -31,10 +32,17 @@ Autosave uses the browser's `localStorage` for the address you opened 3Dica from
 | `3dica:v1:ui` | View settings: expanded rows, gizmo mode and space, snap, ghost, camera |
 | `3dica:v1:evaluating` | Present only while a slow evaluation runs: crash detection (see [below](#after-a-crash)) |
 | `3dica:v1:mcp` | Present only if you turned on the [MCP bridge](/guide/mcp) in a local copy |
+| `3dica:v1:right-tab` | Which tab of the right column was open: Inspector or Chat |
+| `3dica:v1:ai` | The [AI chat](/guide/ai-chat) settings: provider, model and base URL per provider, effort, images, step limit, and whether to remember keys. Never a key. |
+| `3dica:v1:ai-keys` | API keys for the AI chat, one per provider, only while **Remember the key in this browser** is on |
+
+With **Remember** off, the chat keeps `3dica:v1:ai-keys` in the browser's `sessionStorage` instead, which lasts until
+the tab is closed. The autosave, project files and STL exports never contain a key or the conversation, and the
+conversation is not saved anywhere. See [Privacy and your key](/guide/ai-chat#privacy-and-your-key).
 
 Storage belongs to an *origin* (scheme, host and port). The published app at `https://feiteira.github.io/3dica/` and a
-copy you run with `npm run dev` on `http://localhost:5173` therefore have separate autosaves. Clearing the site's data
-in the browser deletes the autosave and its backups.
+copy you run with `npm run dev` on `http://localhost:5173` therefore have separate autosaves, chat settings and keys.
+Clearing the site's data in the browser deletes all of them, including the autosave backups.
 
 ### Backups
 
@@ -170,6 +178,9 @@ Read the code, then click **Run code** (or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd
 
 Both clear the undo history, and the result is autosaved over the current slot a second later (with a backup of the
 old version if the last one is more than a minute old). Save first if the current project matters.
+
+The [AI chat](/guide/ai-chat) can do the same, but only after you click **Approve** in the chat. It can also download
+the project file and STL exports, named as above, but it can't open files.
 
 ## Export STL
 

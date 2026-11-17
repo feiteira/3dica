@@ -17,9 +17,11 @@ the code is right, and the spec lists the known deviations at the top.
 | `src/app/` | Wiring | `context.ts` (the cross-layer interfaces), `commands.ts` (one method per user action), `controller.ts` (the render pass) |
 | `src/eval/` | Evaluation | `protocol.ts` (worker messages), `engine.ts` (runs JSCAD; pure, also runs in Node), `worker.ts` (thin worker shell), `client.ts` (queue, worker lifecycle), `mesh-cache.ts`, `edges.ts` (selection outlines) |
 | `src/view/` | The 3D view (three.js) | `viewport.ts`, `scene-sync.ts`, `materials.ts`, `picking.ts`, `gizmo.ts` |
-| `src/ui/` | Panels and input | `toolbar.ts`, `tree.ts`, `library.ts`, `inspector.ts`, `param-editor.ts`, `code-editor.ts` (CodeMirror 6), `breadcrumb.ts`, `statusbar.ts`, `shortcuts.ts`, `dnd.ts`, `dom.ts` (the `h()` helper, toasts, dialogs), `icons.ts` |
+| `src/ui/` | Panels and input | `toolbar.ts`, `tree.ts`, `library.ts`, `inspector.ts`, `param-editor.ts`, `code-editor.ts` (CodeMirror 6), `breadcrumb.ts`, `statusbar.ts`, `shortcuts.ts`, `dnd.ts`, `dom.ts` (the `h()` helper, toasts, dialogs), `icons.ts`, `right-tabs.ts` (Inspector / Chat), `chat.ts`, `chat-transcript.ts`, `chat-settings.ts`, `chat-markdown.ts` |
 | `src/io/` | Browser file I/O | `files.ts` (download, file picker, window drop) |
-| `src/mcp/` | The optional bridge to the local MCP server | `config.ts` (opt-in), `bridge.ts` (WebSocket client), `handlers.ts` (one handler per tool), `screenshot.ts` |
+| `src/agent/` | The in-app AI chat, without DOM | `types.ts` (the contract), `loop.ts` (`ChatController`), `tools.ts`, `prompt.ts`, `settings.ts`, `summary.ts`, `abort.ts`, `adapters.ts`, `providers/` (`anthropic.ts`, `openai-compatible.ts`, `presets.ts`, `common.ts`) |
+| `src/mcp/` | The tool handlers, and the optional bridge to the local MCP server | `handlers.ts` (one handler per tool, used by MCP and the chat), `screenshot.ts`, `config.ts` (opt-in), `bridge.ts` (WebSocket client) |
+| `shared/` | Plain ESM used by both the MCP server and the app | `tool-catalog.mjs` (tool names, descriptions, zod schemas), `briefing.mjs` (the model briefing and code-API cheat sheet), with `.d.mts` types |
 | `mcp/` | The MCP server (Node) | `server.mjs`, `lib/` |
 | `src/main.ts` | Boot | Builds everything in order and installs `window.__3dica` |
 
@@ -232,8 +234,8 @@ plain:
 - **Cap:** 200 steps.
 - **Not in history:** the selection, the entered group, the view mode, expanded rows, gizmo settings and the camera.
 - **Reset** on New, Sample, Open and reload. The history is not saved.
-- Changes made through the MCP server are ordinary steps labelled `MCP: …`, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes an
-  assistant's edit.
+- Changes made through the MCP server are ordinary steps labelled `MCP: …`, and changes made by the in-app chat are
+  labelled `AI: …`, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes an assistant's edit.
 - The code editor keeps its own CodeMirror history while you type in it. Its text is committed to the store 0.4 s
   after you stop typing, as one coalesced *Edit code* step.
 
@@ -256,14 +258,76 @@ the user's camera and selection never change and the canvas never flickers. `src
 views, draws the labels, axis triad and scale bar, and writes the text that goes with the image. Published copies,
 such as the GitHub Pages site, never open the socket. See [AI assistants (MCP)](/guide/mcp).
 
+The tool list itself (names, descriptions, zod input schemas, annotations) lives in `shared/tool-catalog.mjs`, plain
+ESM that both Node and the app's bundle load. `toolCatalog('mcp' | 'chat')` returns it for one audience: the texts
+differ only where the two really differ (the history label prefix, file tools, confirmation, the screenshot size).
+
+## The AI chat
+
+The Chat tab is a second front end to the same tools, running entirely in the tab. The user's API key goes from the
+browser straight to the provider; there is no 3Dica server.
+
+```text
+ui/chat.ts  (the Chat panel)
+  │ send(text)             ▲ entries, state, usage
+  ▼                        │ (subscribe: one render per frame)
+agent/loop.ts  ChatController
+  │                                 │ each tool call
+  │ addUser · runTurn ·             ▼
+  │ addToolResults            agent/tools.ts
+  ▼                                 │ label prefix 'AI'
+ChatSession (from the adapter)      ▼
+  providers/anthropic.ts      mcp/handlers.ts ──▶ store
+  providers/openai-compatible.ts
+  │ HTTPS, straight from the tab (CORS)
+  ▼
+the provider: Anthropic, OpenAI, OpenRouter, Ollama, …
+```
+
+- **The contract** is `src/agent/types.ts`: `AgentTool`, `ProviderPreset`, `ProviderConfig`, `ChatSession`,
+  `ProviderAdapter`, `TurnEvent`, `ChatEntry`. Start there.
+- **The loop** (`loop.ts`, `ChatController`) has no DOM. A user message goes in with an `<app_state>` block in front
+  (`prompt.ts`: project, selection, context group, paused code, errors). Then it runs model turns: every tool call of a
+  turn runs in order, and all results go back in one `addToolResults`, also on Stop, bad input or an unknown tool, so
+  the provider's history always pairs calls with results. It stops when the model ends its turn, on Stop, at the
+  step limit (`maxSteps`, default 25) or after `maxChanges` project changes (default 100, half the undo history), where
+  `continue()` goes on. `new_project` and `load_sample` wait for a `confirm` entry that the user approves or
+  declines. The panel reads `entries`, `state`, `usage`, `canContinue` and `canRetry` (Retry only for errors that may
+  pass, or after a settings change), and `subscribe()` fires on every streamed delta. Entries are replaced, never
+  mutated. The same text sent again after a failure is a retry, not a second copy for the model.
+- **The tools** (`tools.ts`) turn the catalog's zod shapes into a portable JSON Schema subset, validate the model's
+  input, and run the handlers of `src/mcp/handlers.ts` with the label prefix `AI`. Each call is one undo step. The
+  chat's `undo` and `redo` walk only `AI: …` steps and stop at the user's (an AI change after an undo would clear the
+  user's redo steps).
+  `save_project` and `export_stl` download through `ctx.files`, and errors come back as text the model can read.
+- **The adapters** own the conversation history in their provider's native format and only ever append to it, which
+  keeps Anthropic's thinking blocks intact and prompt caching effective. `anthropic.ts` uses `@anthropic-ai/sdk`
+  (streaming, adaptive thinking with `effort` on Claude 4.6 and later, prompt caching). `openai-compatible.ts` uses the
+  `openai` SDK for every other preset and strips the SDK's `x-stainless-*` headers, so the browser's CORS preflight
+  asks only for `authorization` and `content-type`. It sends screenshots as text, per request and without changing
+  the stored history, when images are off, when OpenRouter lists the model as text-only, or after the server refused
+  them once (that turn is sent again). It echoes Gemini's thought signatures and DeepSeek's `reasoning_content`. A
+  `ProviderError`'s message is the provider's own text; `describeError` in `loop.ts` writes the one sentence around it. `presets.ts` lists the providers; each hosted one was checked for
+  CORS from a browser.
+- **Settings** (`settings.ts`) are in `localStorage` under `3dica:v1:ai`. Keys are kept apart under
+  `3dica:v1:ai-keys`, in `localStorage` or `sessionStorage` depending on "remember", and in memory when storage is
+  blocked. Error texts shown to the user go through `redactKey`, and an authentication error leaves out the provider's
+  own text, since some providers echo a masked key.
+- **Bundle.** The panel imports only `loop.ts`, `settings.ts`, `presets.ts` and `adapters.ts`. The tool layer (zod),
+  the system prompt (the cheat sheet reads `@jscad/modeling`) and each provider SDK are separate chunks, loaded on the
+  first message.
+- **The panel** (`src/ui/chat*.ts`) renders the transcript with a small Markdown renderer that builds DOM nodes with
+  `textContent` only, so model text never becomes HTML. `right-tabs.ts` holds the Inspector and Chat tabs and
+  <kbd>Ctrl</kbd>+<kbd>L</kbd>.
+
 ## Boot order
 
 `src/main.ts` builds the app in this order:
 
 1. `Autosave.boot(location.search)` picks the project (`?fresh`, the autosave, a backup or the sample);
 2. the `Store`, the `EvalClient` (which spawns the worker), the viewport, the commands and the controller;
-3. `viewport.mount(#view)`, then the breadcrumb overlay, toolbar, tree, library, inspector, the MCP bridge (only if
-   enabled), the status bar and the shortcuts;
+3. `viewport.mount(#view)`, then the breadcrumb overlay, toolbar, tree, library, inspector, the right column's tabs and
+   the chat panel, the MCP bridge (only if enabled), the status bar and the shortcuts;
 4. the autosave subscriptions and the other-tab watcher;
 5. `window.__3dica`, then the first controller pass, and `ready = true`.
 

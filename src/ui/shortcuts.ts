@@ -1,9 +1,21 @@
 // §4.13 keyboard shortcuts. Ignored while focus is in an input / textarea / select / CodeMirror, except Ctrl+Enter,
-// Ctrl+S and Esc (Esc blurs the field). Every handled key calls preventDefault() (overrides Chrome's Ctrl+D/S/O).
+// Ctrl+S, Ctrl+L and Esc (Esc blurs the field). Every handled key calls preventDefault() (overrides Chrome's Ctrl+D/S/O
+// and Ctrl+L, which would focus the address bar). The chat's message box handles its own Enter / Ctrl+Enter (send)
+// and stops the event, so Ctrl+Enter there never runs code.
 import type { InstallShortcuts } from '../app/context'
 import { isEditable } from './dom'
+import { toggleChat } from './right-tabs'
 
 export const install: InstallShortcuts = (ctx) => {
+  // Ctrl+L (Inspector ⇄ Chat) works everywhere, the code editor included, so it listens in the capture phase,
+  // before CodeMirror's own Ctrl+L (select line) sees the key
+  const onChatKey = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.isComposing || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'l') return
+    if (document.querySelector('dialog[open]')) return
+    e.preventDefault()
+    e.stopPropagation()
+    toggleChat()
+  }
   const onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.isComposing) return
     // a modal <dialog> owns the keyboard
@@ -28,6 +40,8 @@ export const install: InstallShortcuts = (ctx) => {
       return
     }
     if (editable) return
+    // the chat settings form has nothing to do with the scene: Backspace on its checkboxes must not delete an object
+    if (t instanceof Element && t.closest('.chat-settings')) return
     // let a focused button react to Enter / Space natively
     if (t instanceof HTMLElement && t.tagName === 'BUTTON' && (key === 'Enter' || key === ' ')) return
 
@@ -37,10 +51,13 @@ export const install: InstallShortcuts = (ctx) => {
         case 'z': handled(); if (shift) c.redo(); else c.undo(); return
         case 'y': handled(); c.redo(); return
         case 'd': handled(); if (shift) c.duplicateUnique(); else c.duplicateLinked(); return
-        case 'c':
-          // keep native copy of selected page text when no object is selected
+        case 'c': {
+          // keep native copy of selected page text when no object is selected, and always for text selected in the chat
           if (ctx.store.ui.selection.kind !== 'occ') return
+          const sel = document.getSelection()
+          if (sel && !sel.isCollapsed && sel.anchorNode && document.getElementById('chat')?.contains(sel.anchorNode)) return
           handled(); c.copy(); return
+        }
         case 'v':
           if (!ctx.clipboard.has()) return
           handled(); c.paste(shift); return
@@ -82,6 +99,10 @@ export const install: InstallShortcuts = (ctx) => {
       case 'f': handled(); c.frame(); return
     }
   }
+  window.addEventListener('keydown', onChatKey, true)
   window.addEventListener('keydown', onKey)
-  return () => window.removeEventListener('keydown', onKey)
+  return () => {
+    window.removeEventListener('keydown', onChatKey, true)
+    window.removeEventListener('keydown', onKey)
+  }
 }

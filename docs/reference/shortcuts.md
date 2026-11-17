@@ -4,13 +4,16 @@ These are all the keys 3Dica handles. On macOS, <kbd>Cmd</kbd> works wherever <k
 
 ## Where shortcuts work
 
-The app's shortcuts are active while the keyboard is **not** in a text field, a number field, a drop-down list or the code editor. Three keys also work inside the inspector's fields and the code editor:
+The app's shortcuts are active while the keyboard is **not** in a text field, a number field, a drop-down list or the code editor. Four keys also work inside the inspector's fields and the code editor:
 
 | Key | Inside a field or the code editor |
 |---|---|
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Run code (see below) |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the project |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Switch between the Inspector and the Chat |
 | <kbd>Esc</kbd> | Leave the field, so the other shortcuts work again |
+
+In the chat's message box, <kbd>Enter</kbd> and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send the message instead (see [Chat](#chat)).
 
 The inline rename box in the tree and the Library is the exception: it keeps every key for itself. Inside a field, any other key belongs to the field. For example, <kbd>Ctrl</kbd>+<kbd>Z</kbd> is the field's or the editor's own text undo, and <kbd>Ctrl</kbd>+<kbd>D</kbd> in the editor selects the next match. Press <kbd>Esc</kbd> first, then use the app shortcut. After you press <kbd>Enter</kbd> in an inspector field, the keyboard returns to the app on its own.
 
@@ -40,7 +43,7 @@ Shortcuts are also off while a dialog is open, and <kbd>Enter</kbd> or <kbd>Spac
 |---|---|
 | <kbd>Ctrl</kbd>+<kbd>D</kbd> | Duplicate the selected object as a linked copy. |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | Duplicate as a unique copy (clones the definition). |
-| <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy the selected object. Without a selected object, the browser's own copy runs. |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy the selected object. Without a selected object, or with text selected in the chat, the browser's own copy runs. |
 | <kbd>Ctrl</kbd>+<kbd>V</kbd> | Paste a linked copy into the current group. Does nothing until you have copied an object. |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> | Paste a unique copy. |
 | <kbd>U</kbd> | Make the selected instance unique. |
@@ -73,6 +76,12 @@ Shortcuts are also off while a dialog is open, and <kbd>Enter</kbd> or <kbd>Spac
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the project as `<name>.3dica.json`. Also works in fields and the editor. |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a `.3dica.json` file. |
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Run code: apply the code you are typing now, run a paused project, and retry what failed (for the selected object's definition, or everything when nothing is selected). Also works in fields and the editor. |
+
+### Panels
+
+| Key | Action |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Show the [AI chat](/guide/ai-chat) and put the cursor in its message box. Pressed again, back to the Inspector. Works everywhere, also in fields and the code editor (instead of the browser's "go to the address bar"). |
 
 Letter shortcuts ignore the key when <kbd>Shift</kbd> is held, and the app ignores <kbd>Alt</kbd> combinations other than <kbd>Alt</kbd>+<kbd>H</kbd>. Other <kbd>Ctrl</kbd> combinations are left to the browser.
 
@@ -127,7 +136,24 @@ The most useful CodeMirror keys:
 
 <kbd>Tab</kbd> does not indent in the editor: it moves the keyboard to the next control. Use <kbd>Ctrl</kbd>+<kbd>]</kbd> to indent.
 
+<kbd>Ctrl</kbd>+<kbd>L</kbd> opens the chat, so CodeMirror's own "select line" on that key is not available. Triple-click a line to select it.
+
 On macOS, CodeMirror uses its own Mac keys for a few of these: <kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>[</kbd> / <kbd>]</kbd> folds and unfolds, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> toggles a block comment.
+
+### Chat
+
+In the chat's message box:
+
+| Key | Action |
+|---|---|
+| <kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Send the message. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> does not run code here. |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | New line |
+| <kbd>Esc</kbd> | Leave the message box, so the app's shortcuts work again |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Back to the Inspector, with the cursor where it was before (for example in the code editor) |
+
+In the chat settings, <kbd>Esc</kbd> is **Cancel**, and the app's other shortcuts are off.
+
+On the tab bar above the panel, <kbd>←</kbd> <kbd>→</kbd> (or <kbd>↑</kbd> <kbd>↓</kbd>), <kbd>Home</kbd> and <kbd>End</kbd> switch between the Inspector and Chat tabs.
 
 ### Dialogs
 

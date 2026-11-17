@@ -7,6 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **AI chat.** The right column now has two tabs, **Inspector** and **Chat**, and <kbd>Ctrl</kbd>+<kbd>L</kbd>
+  switches between them. In the Chat tab an assistant works on the open project with the same tools as the MCP
+  server: it reads the scene and the code, creates and edits objects, and takes screenshots to check its work. Tool
+  calls show as cards with their input, result and screenshot thumbnails, and **Stop** interrupts a run.
+- **Bring your own key.** Providers: Anthropic, OpenAI, OpenRouter, Google Gemini, Groq, Mistral and DeepSeek, local
+  models through Ollama or LM Studio, and any OpenAI-compatible server as Custom. The model list comes from the
+  provider, and any model id can be typed. The chat calls the provider straight from the browser, also on the hosted
+  app. Keys are kept per provider in this tab only, or in this browser when you turn **Remember the key** on (it
+  starts off), and never in project files, the autosave or exports.
+- **Undoable AI changes.** Every change the assistant makes is one undo step labelled `AI: …`, and its own undo only
+  walks those steps, never yours. Before it replaces the project (New or Sample), the chat asks you to approve it.
+- Manual: a new [AI chat](https://feiteira.github.io/3dica/manual/guide/ai-chat.html) page with setup per provider,
+  privacy, costs and troubleshooting.
+
 ## [0.1.0] — 2026-11-12
 
 The first public release.

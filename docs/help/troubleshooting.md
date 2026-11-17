@@ -209,6 +209,23 @@ context.`
   <kbd>Enter</kbd> to commit: that also returns the keyboard to the app.
 - **Undo history is gone.** It is not saved: a reload, New, Sample or Open starts a new history.
 
+## AI chat
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The message box is disabled and says *Add your … API key to start.* | No provider is set up yet | Click **Set up** and paste a key, or choose Ollama or LM Studio. See [AI chat](/guide/ai-chat#set-up-a-provider). |
+| *… did not accept the API key. Check the key in the chat settings.* | A wrong or revoked key, or a key of another provider | Click **Open settings**, paste the key again, Save, then **Retry**. |
+| *Could not reach …* | You are offline, or the provider or local server doesn't allow requests from the page (CORS) | See [Local models](/guide/ai-chat#local-models) for Ollama and LM Studio, and [Custom servers](/guide/ai-chat#custom-servers). |
+| *This model does not take images. …* | The model reads only text. Usually the chat notices this itself and sends it screenshots as text | Turn off **Send screenshots as images** in the chat settings. |
+| *The conversation is too long for this model. Start a new chat.* | The conversation, with its screenshots, no longer fits the model | Click **New chat**. |
+| An error notice without **Retry** | Trying again unchanged would fail the same way (a wrong key, an unknown model) | Fix it in the chat settings: then **Retry** appears. |
+| *… refused the request* about tools, or the assistant never changes anything | The model can't call tools, or does it badly | Choose a model that supports tool calling. |
+| *Paused after 25 steps …* | The step limit of one message | Click **Continue**, or raise **Max steps per message**. |
+| The assistant changed something you didn't want | It misread the request, or made a mistake | Press <kbd>Ctrl</kbd>+<kbd>Z</kbd>: each of its changes is one undo step labelled `AI: …`. |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> no longer selects a line in the code editor | <kbd>Ctrl</kbd>+<kbd>L</kbd> switches to the chat | Triple-click the line instead. |
+
+The full list of chat messages is in [AI chat › Troubleshooting](/guide/ai-chat#troubleshooting).
+
 ## Other surprises
 
 - **A change shows up on several objects.** They are linked copies of one definition: the purple tint and the `◆N`

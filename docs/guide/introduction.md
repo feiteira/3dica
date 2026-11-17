@@ -15,8 +15,9 @@ Think of OpenSCAD modules that you can click on, drag around and copy, and that 
 - **Makers designing parts for 3D printing**, who want exact dimensions, parameters they can tweak, and an STL at the
   end.
 - **Programmers** who would rather write a loop than draw a sketch.
-- **AI-assisted modeling.** When you run 3Dica locally, an AI assistant can read and edit the open project and take
-  screenshots of the view through an MCP server. See [AI assistants (MCP)](/guide/mcp).
+- **AI-assisted modeling.** The [AI chat](/guide/ai-chat) in the right column builds and changes parts for you,
+  with your own API key or a local model, and checks its work in screenshots. When you run 3Dica locally, an
+  assistant such as Claude Code can also drive it through an MCP server. See [AI assistants (MCP)](/guide/mcp).
 
 ## The core idea
 

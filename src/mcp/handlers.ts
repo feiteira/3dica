@@ -1,8 +1,9 @@
 // The app side of the MCP tools: one handler per bridge method (the MCP server in mcp/server.mjs forwards tool calls
-// here over a local WebSocket). Handlers use the same core ops as the UI, and every change is ONE store.update with a
-// history label "MCP: …", so the user can undo the assistant's work with Ctrl+Z. After a change they wait until the
-// evaluator is idle (no animation frames involved: the tab may be in the background) and report per-definition
-// status, size and errors, so the model learns about failures immediately.
+// here over a local WebSocket; the in-app chat, src/agent/tools.ts, calls them directly). Handlers use the same core ops
+// as the UI, and every change is ONE store.update with a history label "MCP: …" (the chat's: "AI: …"), so the user can
+// undo the assistant's work with Ctrl+Z. After a change they wait until the evaluator is idle (no animation frames
+// involved: the tab may be in the background) and report per-definition status, size and errors, so the model learns
+// about failures immediately.
 import type { AppContext, Box, CaptureOptions, RenderState } from '../app/context'
 import type { Definition, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform, UiState, Vec3 } from '../core/types'
 import { IDENTITY_XF } from '../core/types'
@@ -38,6 +39,8 @@ export interface HandlerOptions {
   settleMs?: number
   /** called with the history label after every request that changed the project */
   onAction?: (label: string) => void
+  /** start of every history label, action label and toast: 'MCP' (default) → "MCP: Add Cube"; the chat uses 'AI' */
+  labelPrefix?: string
 }
 
 const TEMPLATE_KINDS: TemplateKind[] = ['cube', 'sphere', 'cylinder', 'torus', 'code', 'group']
@@ -124,22 +127,27 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
   const settleMs = opts.settleMs ?? Math.min(45_000, (ctx.params?.evalTimeoutMs ?? 20_000) + 5_000)
   const P = (): Project => ctx.store.project
   const U = (): UiState => ctx.store.ui
+  const prefix = opts.labelPrefix ?? 'MCP'
+  /** "MCP: Add Cube" */
+  const L = (label: string): string => `${prefix}: ${label}`
+  /** a label of ours without the prefix (the user's own labels stay as they are) */
+  const unprefixed = (label: string): string => (label.startsWith(`${prefix}: `) ? label.slice(prefix.length + 2) : label)
 
   const fresh = (): RenderState => {
     const rs = ctx.controller.current()
     return rs.project === P() && rs.ui === U() ? rs : ctx.controller.run()
   }
 
-  /** One undoable step labelled "MCP: <label>". Refusals (OpError) become McpErrors; nothing changes then. */
+  /** One undoable step labelled "MCP: <label>" (the prefix of opts.labelPrefix). Refusals (OpError) become McpErrors; nothing changes then. */
   const mutate = <T>(label: string, recipe: (d: Project) => T): { value: T; changed: boolean } => {
     ctx.emit('flushCode', undefined) // a half-typed edit of the user is committed first, so it is not lost
     const store = ctx.store
     const prevOnError = store.onError
     store.onError = () => {} // the model gets the message; no error toast for a refused assistant request
     try {
-      const r = store.update(`MCP: ${label}`, recipe)
+      const r = store.update(L(label), recipe)
       if (!r.ok) throw new McpError(r.error)
-      if (r.changed) opts.onAction?.(`MCP: ${label}`)
+      if (r.changed) opts.onAction?.(L(label))
       return { value: r.value, changed: r.changed }
     } finally {
       store.onError = prevOnError
@@ -762,7 +770,7 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
         if (!label || !ctx.store.undo()) break
         done.push(label)
       }
-      if (done.length) opts.onAction?.(`MCP: Undo ${done[0].replace(/^MCP: /, '')}`)
+      if (done.length) opts.onAction?.(L(`Undo ${unprefixed(done[0])}`))
       const out: Record<string, unknown> = { ok: done.length > 0, undone: done, canUndo: ctx.store.canUndo(), canRedo: ctx.store.canRedo() }
       if (!done.length) out.note = 'Nothing to undo'
       Object.assign(out, await report([]))
@@ -778,7 +786,7 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
         if (!label || !ctx.store.redo()) break
         done.push(label)
       }
-      if (done.length) opts.onAction?.(`MCP: Redo ${done[0].replace(/^MCP: /, '')}`)
+      if (done.length) opts.onAction?.(L(`Redo ${unprefixed(done[0])}`))
       const out: Record<string, unknown> = { ok: done.length > 0, redone: done, canUndo: ctx.store.canUndo(), canRedo: ctx.store.canRedo() }
       if (!done.length) out.note = 'Nothing to redo'
       Object.assign(out, await report([]))
@@ -835,16 +843,16 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
       const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 200) : 'Untitled'
       ctx.emit('flushCode', undefined)
       ctx.store.reset(emptyProject(name), freshUi())
-      opts.onAction?.('MCP: New project')
-      ctx.toast(`MCP: new empty project '${name}'`)
+      opts.onAction?.(L('New project'))
+      ctx.toast(L(`new empty project '${name}'`))
       return { ok: true, project: name }
     },
 
     async load_sample() {
       ctx.emit('flushCode', undefined)
       ctx.store.reset(sampleProject(), freshUi({ expanded: { ...SAMPLE_EXPANDED } }))
-      opts.onAction?.('MCP: Load sample')
-      ctx.toast("MCP: loaded the sample 'Bracket kit'")
+      opts.onAction?.(L('Load sample'))
+      ctx.toast(L("loaded the sample 'Bracket kit'"))
       frameAllSoon()
       const out: Record<string, unknown> = { ok: true, project: P().name }
       Object.assign(out, await report([]))
@@ -867,8 +875,8 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
       ctx.emit('flushCode', undefined)
       // runs the file's code without the "Run it?" prompt: the request comes from the user's own assistant
       ctx.store.reset(project, freshUi())
-      opts.onAction?.(`MCP: Open ${project.name}`)
-      ctx.toast(`MCP: opened '${project.name}'`)
+      opts.onAction?.(L(`Open ${project.name}`))
+      ctx.toast(L(`opened '${project.name}'`))
       if (project.camera) {
         try { ctx.viewport.setCamera(project.camera) } catch { /* not mounted */ }
       } else frameAllSoon()

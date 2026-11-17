@@ -37,8 +37,11 @@ truth for shape, and the tree holds placement. Everything runs in your browser. 
   after 20 s, or about 1 s after you type over it. Geometry that would run the tab out of memory is refused.
 - **Files.** Undo and redo, autosave with 5 backups, `.3dica.json` save and open, and binary STL export. Opening a file
   that contains code asks before running it.
-- **AI assistants.** A local [MCP](https://modelcontextprotocol.io) server lets an assistant drive a running 3Dica and
-  take screenshots.
+- **AI chat.** The Chat tab (<kbd>Ctrl</kbd>+<kbd>L</kbd>) builds and changes parts for you and checks its work in
+  screenshots. Bring your own key for Anthropic, OpenAI, OpenRouter, Gemini, Groq, Mistral or DeepSeek, or use a local
+  model with Ollama or LM Studio. It runs in the browser, and every change it makes is one undo step.
+- **AI assistants.** A local [MCP](https://modelcontextprotocol.io) server lets an assistant such as Claude Code drive a
+  running 3Dica and take screenshots.
 
 ## Quick start
 
@@ -55,6 +58,18 @@ Open <http://localhost:5173>. Add `?fresh` to the URL to start from the sample p
 
 New to the app? Start with [Getting started](https://feiteira.github.io/3dica/manual/guide/getting-started.html) and the
 [tutorials](https://feiteira.github.io/3dica/manual/tutorials/first-part.html) in the manual.
+
+## AI chat
+
+The right column has two tabs: **Inspector** and **Chat**. In the Chat tab you ask an assistant for a part or a change,
+and it works on the open project with the same tools as the MCP server below: it reads the scene and the code, creates
+and edits objects, and takes screenshots to check what it built. Each change is one undo step labelled `AI: …`, and it
+asks before it replaces the project.
+
+The chat runs entirely in your browser, also on the hosted app. You paste your own API key (Anthropic, OpenAI,
+OpenRouter, Google Gemini, Groq, Mistral, DeepSeek) or point it at Ollama, LM Studio or any OpenAI-compatible server.
+The key stays in your browser and goes only to that provider; 3Dica has no server. Setup, privacy and costs are in the
+manual: [AI chat](https://feiteira.github.io/3dica/manual/guide/ai-chat.html).
 
 ## Use it with an AI assistant (MCP)
 
@@ -115,9 +130,11 @@ src/
   state/     store with undo, clipboard, autosave, other-tab detection
   eval/      worker protocol, engine, worker, client, mesh cache
   view/      three.js viewport, scene sync, materials, picking, gizmo
-  ui/        panels, code editor, shortcuts
+  ui/        panels, code editor, shortcuts, the Chat tab (chat*.ts)
   app/       commands, controller and the cross-layer contract (context.ts)
   io/        downloads, file picking, window drop
+  agent/     the in-app AI chat: loop, tools, prompt, settings, provider adapters (contract: types.ts)
+  mcp/       the tool handlers (shared with the chat) and the bridge to the MCP server
   main.ts    boot
 tests/
   unit/      vitest
@@ -125,6 +142,7 @@ tests/
   docs/      the manual's screenshot generator (npm run docs:shots)
 docs/        the manual (VitePress); docs/design/ holds the historical v0.1 design spec
 mcp/         the local MCP server
+shared/      the tool catalog and model briefing shared by the MCP server and the in-app chat
 public/      static files (favicon)
 ```
 
@@ -146,6 +164,8 @@ issue, see [SECURITY.md](SECURITY.md).
 
 3Dica is built on [three.js](https://threejs.org), [JSCAD](https://github.com/jscad/OpenJSCAD.org)
 (`@jscad/modeling`, `@jscad/stl-serializer`), [CodeMirror](https://codemirror.net),
-[VitePress](https://vitepress.dev) and the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk),
+[VitePress](https://vitepress.dev), the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk),
+the [Anthropic](https://github.com/anthropics/anthropic-sdk-typescript) and [OpenAI](https://github.com/openai/openai-node)
+TypeScript SDKs and [Zod](https://zod.dev),
 and it is built and tested with [Vite](https://vite.dev), [Vitest](https://vitest.dev) and
 [Playwright](https://playwright.dev). It owes its ideas to [OpenSCAD](https://openscad.org).

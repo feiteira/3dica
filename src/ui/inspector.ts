@@ -96,7 +96,7 @@ const SHORTCUTS: [string, string][] = [
   ['Click / Ctrl+click', 'select / deepest part'], ['Double-click, Enter', 'enter a group'], ['Esc', 'exit · deselect'],
   ['Ctrl+D', 'linked copy'], ['Ctrl+Shift+D', 'unique copy'], ['Ctrl+C / V', 'copy / paste'],
   ['W E R', 'move · rotate · scale'], ['Q / X', 'world-local / snap'], ['I', 'isolate'], ['F / Home', 'frame'],
-  ['H / Alt+H', 'hide / unhide all'], ['F2', 'rename'], ['Ctrl+G', 'wrap in group'], ['Del', 'delete'],
+  ['H / Alt+H', 'hide / unhide all'], ['F2', 'rename'], ['Ctrl+G', 'wrap in group'], ['Del', 'delete'], ['Ctrl+L', 'AI chat'],
 ]
 
 const focused = (el: Element) => document.activeElement === el

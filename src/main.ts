@@ -20,6 +20,8 @@ import { mount as mountLibrary } from './ui/library'
 import { mount as mountInspector } from './ui/inspector'
 import { mount as mountBreadcrumb } from './ui/breadcrumb'
 import { mount as mountStatusbar } from './ui/statusbar'
+import { mount as mountRightTabs } from './ui/right-tabs'
+import { mount as mountChat } from './ui/chat'
 import { install as installShortcuts } from './ui/shortcuts'
 import { startMcpBridge } from './mcp/bridge'
 
@@ -83,6 +85,9 @@ function boot(): void {
   mountTree(byId('tree'), ctx)
   mountLibrary(byId('library'), ctx)
   mountInspector(byId('inspector'), ctx)
+  // the right column's tabs: [Inspector] [Chat] (Ctrl+L); the chat acts on the project through the same tools as MCP
+  const rightTabs = mountRightTabs(byId('right-tabs'), { inspector: byId('inspector'), chat: byId('chat') })
+  mountChat(byId('chat'), ctx, rightTabs)
   // local MCP bridge for AI assistants: opt-in with ?mcp, localhost only (src/mcp/config.ts); its pill lives in the status bar
   ctx.mcp = startMcpBridge(ctx)
   mountStatusbar(byId('status'), ctx)

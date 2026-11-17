@@ -2,17 +2,20 @@
 
 3Dica has one window with five areas. This page describes every panel and control, in the order you meet them.
 
-![The 3Dica window with the sample project loaded and nothing selected](/shots/overview.png)
+![The 3Dica window with the sample project loaded, nothing selected and the Inspector tab open](/shots/overview.png)
 
 ```text
 ┌ Toolbar ─────────────────────────────────────────────────────────────────────────┐
-├ Scene tree ─────┬ 3D view ─────────────────────────────────┬ Inspector ───────────┤
-│                 │ breadcrumb                               │ instance, transform, │
-│                 │          isolate banner / paused banner  │ colour, parameters,  │
-├ Library ────────┤                                          │ definition           │
+├ Scene tree ─────┬ 3D view ─────────────────────────────────┬ [Inspector] [Chat] ──┤
+│                 │ breadcrumb                               │ Inspector:           │
+│                 │          isolate banner / paused banner  │ instance, transform, │
+├ Library ────────┤                                          │ colour, parameters,  │
+│                 │                                          │ definition           │
 │                 │ hint                             toasts  ├ Code editor ─────────┤
 ├ Status bar ─────┴──────────────────────────────────────────┴──────────────────────┤
 ```
+
+The right column has two tabs: the **Inspector** with the code editor, and the [Chat](#chat).
 
 The layout needs a window at least 1100 px wide. Below 1440 px most toolbar buttons show only their icon. Below 1560 px the **Manual** link is only its book icon, and below 1500 px the 3Dica name at the left is hidden. While **Run code** is shown, the file buttons (New to STL) show only their icons too. Hover any button for its name and shortcut.
 
@@ -155,9 +158,23 @@ Clicking a breadcrumb segment:
 
 ![Inside Fixture A: the breadcrumb at the top left](/shots/context-breadcrumb.png)
 
+## Right column tabs
+
+The tab bar at the top of the right column switches between **Inspector** and **Chat**. <kbd>Ctrl</kbd>+<kbd>L</kbd>
+switches to the Chat and puts the cursor in its message box, and pressed again goes back to the Inspector, with the
+cursor where it was before. It works everywhere, in the code editor too. With the keyboard on a tab, the arrow keys, <kbd>Home</kbd> and <kbd>End</kbd> move
+between the tabs. The browser remembers the tab you had open, and selecting an object never switches tabs.
+
+A dot on the Chat tab shows what the assistant is doing, so you can follow it from the Inspector too:
+
+| Dot | Meaning |
+|---|---|
+| Blue, blinking | The assistant is working. |
+| Amber | It is waiting for you to approve an action (see [Chat](#chat)). |
+
 ## Inspector
 
-The right column shows what is selected. Edit a field and press <kbd>Enter</kbd>, or leave the field, to apply the change. <kbd>Esc</kbd> puts the previous value back. After <kbd>Enter</kbd> the keyboard goes back to the app, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the edit you just made.
+The Inspector tab shows what is selected. Edit a field and press <kbd>Enter</kbd>, or leave the field, to apply the change. <kbd>Esc</kbd> puts the previous value back. After <kbd>Enter</kbd> the keyboard goes back to the app, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the edit you just made.
 
 ### Nothing selected
 
@@ -242,6 +259,34 @@ The **status line** under the editor shows the state of the selected object:
 ![A failing Bolt: the error marker in the gutter and the message in the status line](/shots/code-error.png)
 
 The [Code API](/reference/code-api) lists what you can call in the code, and [Troubleshooting](/help/troubleshooting) explains the error messages.
+
+## Chat
+
+The Chat tab is an AI assistant that works on the open project. [AI chat](/guide/ai-chat) explains how to set it up and what it can do. This is what you see in it.
+
+![A conversation in the Chat tab: the provider button and context size at the top, the user's message, the assistant's reply, two tool cards with a screenshot thumbnail, and the message box at the bottom](/shots/chat-panel.png)
+
+| Part | Where | What it does |
+|---|---|---|
+| Provider button | top left | Shows the provider and model, for example `Anthropic · claude-opus-5-5`, or `Set up a provider`. Click it for the chat settings. |
+| Context | top right | How many tokens the model read in its last turn, for example `8.5k context`. Hover it for the output tokens of the whole chat. |
+| **New chat** | top right | Clear the conversation and start a fresh one. Disabled while the chat is empty. |
+| Empty state | middle | Before the first message: what the assistant can do, and four example prompts that fill the message box (or **Set up a provider** when none is set up). |
+| Your messages | right-aligned | What you sent. |
+| Replies | left | The assistant's text, with lists, code blocks (with a **Copy** button), tables and links. **Thinking** is the model's reasoning, folded, when the model sends it. A reply from another model than the one you chose (a provider's fallback) says *Answered by …*. |
+| Tool cards | between replies | One per tool call: its name, a one-line summary and its state: a spinner, ✓, ✕, *declined* or *cancelled*. Click the card for the call's input and result. The target button selects the object it created or changed. Screenshots show a thumbnail that opens full size. |
+| Approval card | in the conversation | Before **New project** or **Load sample**: what the assistant wants to do, with **Decline** and **Approve**. While it waits, its tool card says *waiting for you* and the line under the message box *Waiting for your approval above.* |
+| Notices | in the conversation | Pauses, stops and errors, with **Continue**, **Retry**, **New chat** or **Open settings** where they help. **Retry** shows only when trying again can work. |
+| Message box | bottom | Grows up to 8 lines. Disabled, with a **Set up** link, until a provider is set up. |
+| Send / Stop | right of the message box | Sends the message. While the assistant works it becomes **Stop**. |
+
+| Key in the message box | Action |
+|---|---|
+| <kbd>Enter</kbd>, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Send |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | New line |
+| <kbd>Esc</kbd> | Leave the message box |
+
+The chat settings replace the conversation in the panel until you click **Save** or **Cancel** (or press <kbd>Esc</kbd>). Their fields are listed in [AI chat › Settings](/guide/ai-chat#settings).
 
 ## Status bar
 

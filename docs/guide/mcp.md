@@ -5,6 +5,11 @@ Claude Desktop can work in a 3Dica that runs on your machine. The assistant can 
 objects and their code, undo, save, export STL, and **see the result** with screenshots. You can watch it build in your
 own browser tab and take over at any time, or let it run on its own with a headless browser.
 
+::: tip No local setup? Use the chat
+The [AI chat](/guide/ai-chat) in the app's right column has the same tools and works on the hosted site too: you
+paste an API key and talk to it in the app. [Chat or MCP?](/guide/ai-chat#chat-or-mcp) compares the two.
+:::
+
 ![A screenshot taken by the assistant: the sample in four orthographic views (front, right, top and iso), each with its label, an axis triad and a scale bar](/shots/mcp-multiview.png)
 
 ## What you need
@@ -192,7 +197,8 @@ unknown name, a definition that is still in use) comes back as a tool error with
 ::: tip Undo the assistant
 Every change the assistant makes is one ordinary step in the undo history, labelled `MCP: …` (for example
 *MCP: Add Bracket*). Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo it, like your own edits. The assistant's `undo` and
-`redo` tools walk the same history, so they can undo your steps too. They return the labels they undid.
+`redo` tools walk the same history, so they can undo your steps too. They return the labels they undid. Changes made
+by the in-app [AI chat](/guide/ai-chat) are labelled `AI: …` instead, and the chat's own `undo` only walks those.
 :::
 
 Objects are addressed the way 3Dica stores them. A placed object is an **instance path**: the instance ids from the

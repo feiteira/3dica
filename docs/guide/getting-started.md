@@ -20,8 +20,8 @@ npm run dev
 ```
 
 Then open `http://localhost:5173` in your browser. Running locally is also what you need to connect an AI
-assistant: see [AI assistants (MCP)](/guide/mcp). For a production build, run `npm run build` and then
-`npm run preview` (it serves on port 4173).
+assistant of your own, such as Claude Code: see [AI assistants (MCP)](/guide/mcp). The [AI chat](/guide/ai-chat)
+works in both places. For a production build, run `npm run build` and then `npm run preview` (it serves on port 4173).
 
 ::: tip Start from the sample again
 Add `?fresh` to the address (for example `http://localhost:5173/?fresh`) to open the sample and ignore the autosaved
@@ -30,7 +30,7 @@ project. Careful: your first change then autosaves over the previous project. Us
 
 ## A tour of the interface
 
-![The 3Dica window: toolbar at the top, Scene tree and Library on the left, the 3D view in the middle, the inspector and code editor on the right, the status bar at the bottom](/shots/overview.png)
+![The 3Dica window: toolbar at the top, Scene tree and Library on the left, the 3D view in the middle, the Inspector and Chat tabs with the inspector and code editor on the right, the status bar at the bottom](/shots/overview.png)
 
 | Area | Where | What it's for |
 |---|---|---|
@@ -38,8 +38,9 @@ project. Careful: your first change then autosaves over the previous project. Us
 | **Scene** tree | left, top | Every placed object (instance), nested by group. Shows the `◆N` linked-copy badges, a status dot and an eye to hide each row. |
 | **Library** | left, bottom | Every definition in the project, with how often it occurs (`×8`), or `unused`, or `part()` when only code uses it. |
 | **3D view** | center | The scene, a gizmo on the selection, a breadcrumb at the top left, and hints at the bottom left. |
-| **Inspector** | right, top | The selection's label, transform, color and parameters, and below them its definition: name, color, parameter defaults or the group's operation. |
-| **Code editor** | right, bottom | The code of the selected code object. Edits run 0.4 s after you stop typing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs them right away. |
+| **Inspector** tab | right, top | The selection's label, transform, color and parameters, and below them its definition: name, color, parameter defaults or the group's operation. |
+| **Code editor** | right, bottom | The code of the selected code object, under the inspector. Edits run 0.4 s after you stop typing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs them right away. |
+| **Chat** tab | right | The [AI chat](/guide/ai-chat), in place of the inspector. <kbd>Ctrl</kbd>+<kbd>L</kbd> switches between the two tabs. |
 | **Status bar** | bottom | Evaluator state and the last evaluation time, the mesh and triangle count, and the time of the last autosave. |
 
 ### The toolbar
@@ -83,7 +84,8 @@ lines at the origin are the X and Y axes.
 ::: tip Keyboard focus
 Shortcuts work when the keyboard focus isn't in a text field or the code editor. Press <kbd>Esc</kbd> to leave a field
 or the editor. In the inspector, <kbd>Enter</kbd> commits a value and hands the keyboard back to the view. Only
-<kbd>Ctrl</kbd>+<kbd>S</kbd> (save) and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (run code) work everywhere.
+<kbd>Ctrl</kbd>+<kbd>S</kbd> (save), <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (run code) and <kbd>Ctrl</kbd>+<kbd>L</kbd>
+(Inspector or Chat) work everywhere.
 :::
 
 ## Selecting things
@@ -163,4 +165,5 @@ contains code.
 - [Tutorial 2: Linked copies](/tutorials/linked-copies): duplicate, edit once, make unique.
 - [Tutorial 3: Code objects and part()](/tutorials/code-and-parts): write JSCAD code and reuse it.
 - [Coming from OpenSCAD](/guide/coming-from-openscad): your OpenSCAD habits, mapped to 3Dica.
+- [AI chat](/guide/ai-chat): let an assistant build and change parts with you.
 - [Keyboard shortcuts](/reference/shortcuts): every key on one page.

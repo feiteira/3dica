@@ -28,10 +28,10 @@ export default defineConfig({
     siteTitle: '3Dica manual',
     nav: [
       { text: 'Open the app', link: APP },
-      { text: 'Guide', link: '/guide/introduction', activeMatch: '/guide/' },
+      { text: 'Guide', link: '/guide/introduction', activeMatch: '^/guide/(?!ai-chat|mcp)' },
       { text: 'Tutorials', link: '/tutorials/first-part', activeMatch: '/tutorials/' },
       { text: 'Reference', link: '/reference/code-api', activeMatch: '/reference/' },
-      { text: 'AI / MCP', link: '/guide/mcp' },
+      { text: 'AI', link: '/guide/ai-chat', activeMatch: '^/guide/(ai-chat|mcp)' },
     ],
     sidebar: [
       {
@@ -40,6 +40,7 @@ export default defineConfig({
           { text: 'Introduction', link: '/guide/introduction' },
           { text: 'Getting started', link: '/guide/getting-started' },
           { text: 'Coming from OpenSCAD', link: '/guide/coming-from-openscad' },
+          { text: 'AI chat', link: '/guide/ai-chat' },
           { text: 'AI assistants (MCP)', link: '/guide/mcp' },
         ],
       },
