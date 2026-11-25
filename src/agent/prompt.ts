@@ -55,7 +55,7 @@ export function appStatePreamble(ctx: AppContext): string {
 
   const defInfo = (id: string): string => {
     const d = project.defs[id]
-    const kind = d.kind === 'group' ? `group, op ${d.op}` : 'code'
+    const kind = d.kind === 'group' ? `group, op ${d.op}` : d.lang === 'openscad' ? 'OpenSCAD code' : 'code'
     const copies = rs.counts.get(id) ?? 0
     return `definition ${q(d.name)} (${kind}, ${plural(copies, 'copy', 'copies')} in the scene)`
   }

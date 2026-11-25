@@ -39,7 +39,7 @@ project. Careful: your first change then autosaves over the previous project. Us
 | **Library** | left, bottom | Every definition in the project, with how often it occurs (`×8`), or `unused`, or `part()` when only code uses it. |
 | **3D view** | center | The scene, a gizmo on the selection, a breadcrumb at the top left, and hints at the bottom left. |
 | **Inspector** tab | right, top | The selection's label, transform, color and parameters, and below them its definition: name, color, parameter defaults or the group's operation. |
-| **Code editor** | right, bottom | The code of the selected code object, under the inspector. Edits run 0.4 s after you stop typing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs them right away. |
+| **Code editor** | right, bottom | The code of the selected code object, under the inspector. Edits run 0.4 s after you stop typing. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs them right away. An OpenSCAD object also has an **Output** panel for its `echo()` lines and warnings. |
 | **Chat** tab | right | The [AI chat](/guide/ai-chat), in place of the inspector. <kbd>Ctrl</kbd>+<kbd>L</kbd> switches between the two tabs. |
 | **Status bar** | bottom | Evaluator state and the last evaluation time, the mesh and triangle count, and the time of the last autosave. |
 
@@ -47,13 +47,14 @@ project. Careful: your first change then autosaves over the previous project. Us
 
 ![The toolbar](/shots/toolbar.png)
 
-From left to right. Hover a button to see its name and shortcut. In a window narrower than 1440 px most buttons show
-only their icon.
+From left to right. Hover a button to see its name and shortcut. In a window narrower than 1700 px some buttons
+show only their icon (Snap, Ghost, Isolate, Frame, New, Sample and STL), and below 1440 px most other buttons do too.
 
 | Buttons | What they do |
 |---|---|
 | **Cube · Sphere · Cyl · Torus** | Add a primitive to the current group. Each one is a new code object with its own definition and parameters. |
 | **Code** | Add a blank code object (a small rounded cube to start from). |
+| **OpenSCAD** | Add a blank [OpenSCAD object](/guide/openscad): code in OpenSCAD's language instead of JavaScript. |
 | **Group** | Add an empty group (an assembly). |
 | **∪ − ∩** | Wrap the selected object in a new Union, Subtract or Intersect group. Subtract keeps the first child and cuts away the others. |
 | **Move · Rotate · Scale** | Gizmo mode (<kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd>). |
@@ -63,7 +64,7 @@ only their icon.
 | **Isolate** | Show the selected definition on its own at the origin (<kbd>I</kbd>). |
 | **Frame** | Frame the selection (<kbd>F</kbd>), or everything with <kbd>Home</kbd>. |
 | **Undo · Redo** | <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> (or <kbd>Ctrl</kbd>+<kbd>Y</kbd>). The tooltip names the step, for example "Undo Move Bolt". |
-| **New · Sample · Open · Save · STL** | Start an empty project, load the sample, open or save a `.3dica.json` file, export STL. |
+| **New · Sample · Open · Import · Save · STL** | Start an empty project, load the sample, open a `.3dica.json` file, add OpenSCAD `.scad` files to the project, save a `.3dica.json` file, export STL. |
 | **Run code** | Only appears while the project's code is paused, for example after you opened a file with **Open without running**. |
 | **Manual** | Opens this manual in a new tab. It's the book icon at the far right. |
 

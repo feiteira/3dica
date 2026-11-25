@@ -1,5 +1,6 @@
-// §4.1 toolbar: [Cube][Sphere][Cyl][Torus][Code][Group] │ [∪][−][∩] │ [W][E][R] [World/Local] [Snap] │ [Ghost][Isolate][Frame]
-// │ [↶][↷] │ [New][Sample][Open][Save][STL] │ [Run code]* (only while evalPaused). Also wires files dropped on the window to Open.
+// §4.1 toolbar: [Cube][Sphere][Cyl][Torus][Code][OpenSCAD][Group] │ [∪][−][∩] │ [W][E][R] [World/Local] [Snap] │
+// [Ghost][Isolate][Frame] │ [↶][↷] │ [New][Sample][Open][Import][Save][STL] │ [Run code]* (only while evalPaused).
+// Also wires files dropped on the window: .scad files are imported, a project file is opened.
 import type { AppContext, MountPanel, RenderState } from '../app/context'
 import type { TemplateKind } from '../core/templates'
 import { h, setAttrIfChanged, setText } from './dom'
@@ -60,6 +61,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
   const newBtn = button({ id: 'new', icon: 'new', label: 'New', tip: 'New empty project', run: () => { void c.newProject() } })
   const sample = button({ id: 'sample', icon: 'sample', label: 'Sample', tip: "Load the sample project 'Bracket kit'", run: () => { void c.loadSample() } })
   const open = button({ id: 'open', icon: 'open', label: 'Open', tip: 'Open a .3dica.json file (Ctrl+O) — or drop one on the window', run: () => { void c.open() } })
+  const importBtn = button({ id: 'import', icon: 'import', label: 'Import', tip: 'Add OpenSCAD .scad files to the project as objects — several at once, or drop them on the window', run: () => { void c.importScad() } })
   const save = button({ id: 'save', icon: 'save', label: 'Save', tip: 'Download the project as .3dica.json (Ctrl+S)', run: () => c.save() })
   const stl = button({ id: 'export-stl', icon: 'stl', label: 'STL', tip: 'Export the selection (or the whole scene) as binary STL', run: () => { void c.exportStl() } })
   const run = button({ id: 'run-code', icon: 'play', label: 'Run code', tip: "This project's code has not run yet — run it now (Ctrl+Enter)", run: () => c.runCode(), cls: 'tb-run' })
@@ -77,17 +79,18 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
     brand,
     h('div', { class: 'tb-group' }, add('cube', 'cube', 'Cube', 'a cube'), add('sphere', 'sphere', 'Sphere', 'a sphere'),
       add('cylinder', 'cylinder', 'Cyl', 'a cylinder'), add('torus', 'torus', 'Torus', 'a torus'),
-      add('code', 'code', 'Code', 'a blank code object'), add('group', 'group', 'Group', 'an empty group')),
+      add('code', 'code', 'Code', 'a blank code object'), add('openscad', 'scad', 'OpenSCAD', 'a blank OpenSCAD object'),
+      add('group', 'group', 'Group', 'an empty group')),
     sep(),
     h('div', { class: 'tb-group' }, wrapUnion, wrapSub, wrapInt),
     sep(),
     h('div', { class: 'tb-group' }, modeT, modeR, modeS, space, snap),
     sep(),
-    h('div', { class: 'tb-group' }, ghost, isolate, frame),
+    h('div', { class: 'tb-group tb-view' }, ghost, isolate, frame),
     sep(),
     h('div', { class: 'tb-group' }, undo, redo),
     sep(),
-    h('div', { class: 'tb-group tb-file' }, newBtn, sample, open, save, stl),
+    h('div', { class: 'tb-group tb-file' }, newBtn, sample, open, importBtn, save, stl),
     h('div', { class: 'tb-group tb-run-group' }, run),
     h('div', { class: 'tb-group tb-help' }, manual),
   )
@@ -131,6 +134,6 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
   ctx.on('render', render)
   render(ctx.controller.current())
 
-  // §6: a file dropped anywhere on the window opens it
-  ctx.files.onWindowDrop((file) => { void c.open(file) })
+  // §6: a project file dropped anywhere on the window opens it; .scad files are imported into the project
+  ctx.files.onWindowDrop((_file, all) => { void c.dropFiles(all) })
 }

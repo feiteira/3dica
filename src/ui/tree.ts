@@ -48,7 +48,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
     const tw = hasKids
       ? h('span', { class: `tw${expanded ? ' open' : ''}`, 'data-testid': 'tree-toggle', title: expanded ? 'Collapse' : 'Expand' }, icon('chevron'))
       : h('span', { class: 'tw tw-none' })
-    const kindTitle = o.def.kind === 'code' ? 'Code object' : o.def.op === 'none' ? 'Group' : `Boolean ${o.def.op}`
+    const kindTitle = o.def.kind === 'code' ? (o.def.lang === 'openscad' ? 'OpenSCAD object' : 'Code object') : o.def.op === 'none' ? 'Group' : `Boolean ${o.def.op}`
     setChildren(row.el,
       tw,
       h('span', { class: `kind kind-${o.role}`, title: kindTitle }, icon(defIconName(o.def))),
@@ -65,7 +65,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
   const rowSig = (o: Occurrence, rs: RenderState) => {
     const ex = o.def.kind === 'group' && o.def.children.length > 0 ? (rs.ui.expanded[o.key] ? 'v' : '>') : '-'
     return [o.path.length, o.instance.name ?? '', o.def.name, rs.counts.get(o.def.id) ?? 0, ex, o.instance.hidden ? 'H' : '',
-      o.role, o.def.kind === 'group' ? o.def.op : ''].join('|')
+      o.role, o.def.kind === 'group' ? o.def.op : o.def.lang ?? ''].join('|')
   }
 
   const render = (rs: RenderState) => {

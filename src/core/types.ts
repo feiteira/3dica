@@ -20,7 +20,16 @@ export interface ParamDef {
 export type GroupOp = 'none' | 'union' | 'subtract' | 'intersect'   // subtract = (union of child 0) minus all later children
 
 interface DefBase { id: Id; name: string; color?: string /* '#rrggbb' lowercase */ }
-export interface CodeDef  extends DefBase { kind: 'code';  code: string; params: ParamDef[] }
+/** The language of a code definition: absent = JSCAD (a function body), 'openscad' = OpenSCAD source. */
+export type CodeLang = 'openscad'
+export interface CodeDef  extends DefBase {
+  kind: 'code'; code: string
+  /** OpenSCAD defs: DERIVED from the code (core/scad.ts scadParams) whenever it changes and on load */
+  params: ParamDef[]
+  lang?: CodeLang
+  /** OpenSCAD only: the files its use <…> / include <…> name, by normalized relative path ('lib/gear.scad') */
+  files?: Record<string, string>
+}
 export interface GroupDef extends DefBase { kind: 'group'; op: GroupOp; children: Instance[] }
 export type Definition = CodeDef | GroupDef
 

@@ -22,6 +22,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   walks those steps, never yours. Before it replaces the project (New or Sample), the chat asks you to approve it.
 - Manual: a new [AI chat](https://feiteira.github.io/3dica/manual/guide/ai-chat.html) page with setup per provider,
   privacy, costs and troubleshooting.
+- **OpenSCAD objects.** A code object can now be written in OpenSCAD. 3Dica's own interpreter runs it in the browser,
+  following OpenSCAD 2021.01: modules, functions, recursion, list comprehensions, `children()`, `$fn` / `$fa` / `$fs`,
+  every primitive, transform and boolean, `hull()`, `minkowski()`, `offset()`, the extrusions and `projection()`, with
+  OpenSCAD's tessellation, echo text and warnings. The code is never run as JavaScript.
+- **Import.** A toolbar **Import** button, and `.scad` files dropped on the window, add OpenSCAD files to the open
+  project in one undo step. Files that another chosen file uses or includes are attached to it; missing ones are
+  listed. An **OpenSCAD** toolbar button adds a blank OpenSCAD object.
+- **Customizer parameters.** An OpenSCAD object's top-level variables are its parameters, with Customizer comments as
+  ranges, steps, drop-downs, descriptions and tabs. Copies override them as usual, and a default changed in the
+  Inspector is written back into the code.
+- **OpenSCAD editing.** Syntax highlighting and completion, errors in the gutter at their line (also inside attached
+  files), and an **Output** panel with the `echo()` lines and warnings. The Inspector shows an OpenSCAD badge, the
+  attached files (attach, replace, remove, download) and **Export .scad**.
+- **`part()` both ways.** OpenSCAD code can place another object with `part("Name", width = 20)`, and JavaScript code
+  can `part()` an OpenSCAD object.
+- **AI chat and MCP.** `create_object` takes `language: "openscad"`, and definitions report their language,
+  attached files and echo output.
+- Not supported in OpenSCAD objects: `import()`, `surface()` and DXF files. `text()` uses a built-in single-stroke font
+  with OpenSCAD's default font metrics. A 2D-only result is shown 1 mm thick, like OpenSCAD's preview.
+- Manual: new pages [OpenSCAD objects](https://feiteira.github.io/3dica/manual/guide/openscad.html) and
+  [OpenSCAD support](https://feiteira.github.io/3dica/manual/reference/openscad.html).
+
+### Changed
+
+- The project file format stays version 1. Code definitions can have the optional fields `lang` and `files`; an older
+  3Dica drops them and opens such an object as JavaScript code, which then fails.
+- Below 1700 px **Snap**, **Ghost**, **Isolate**, **Frame**, **New**, **Sample** and **STL** show only their icons, to
+  make room for **OpenSCAD** and **Import**; **Open**, **Import** and **Save** keep their names down to 1440 px.
 
 ## [0.1.0] — 2026-11-12
 

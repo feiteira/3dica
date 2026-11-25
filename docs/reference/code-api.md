@@ -169,6 +169,16 @@ The calling object's own parameters do not flow into the part. Pass what you nee
 - Calling `part()` again with the same overrides is cheap: the worker remembers recent results (see
   [Caching](#caching-and-performance)).
 
+### OpenSCAD objects
+
+The target of `part()` can be an [OpenSCAD object](/guide/openscad). Its geometry comes back like any other: an array
+in its own coordinates, with the colours its `color()` calls set. Pass its parameters by name, and give a choice
+parameter its option text, as the Inspector shows it, or the drop-down item's value from the OpenSCAD code:
+`part('bracket', { length: 80, screw: 'M5' })` and `part('bracket', { length: 80, screw: 5 })` are the same.
+
+It works the other way round too: OpenSCAD code can place this definition with `part("Name", width = 20);`. See
+[part() both ways](/guide/openscad#part-both-ways).
+
 ### Dependencies and the rest of the app
 
 - **Renaming** a definition rewrites `part('Old'` and `part("Old"` in every code object, so calls keep working.
@@ -249,6 +259,9 @@ being built.
 | `part()` and group nesting | 64 levels | `Cycle: nesting deeper than 64 levels (…)` |
 | STL export | 60 s | `STL export timed out after 60 s` |
 | Crashes | 3 within 10 s | The worker is restarted after each crash. After the third, evaluation stops with `Evaluator keeps crashing — reload the page`. |
+
+OpenSCAD objects share these limits and add a few of their own, for recursion, list and string sizes and runaway
+loops: see [OpenSCAD support › Limits](/reference/openscad#limits).
 
 If the whole tab dies while evaluating (out of memory), the next start restores your project with its code **paused**
 and tells you which object was running. Fix that object's code, then click **Run code**. See

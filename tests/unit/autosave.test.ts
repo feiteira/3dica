@@ -203,6 +203,48 @@ describe('autosave: paused code, crash marker, a robust backup ring', () => {
   })
 })
 
+describe('autosave: OpenSCAD objects with attached files', () => {
+  const withAttachment = (chars: number) => {
+    const p = sampleProject()
+    p.defs.d_scad = { id: 'd_scad', name: 'Big', kind: 'code', lang: 'openscad', code: 'include <lib.scad>\ncube(x);\n', params: [], files: { 'lib.scad': 'x = 1;\n//' + 'y'.repeat(chars) } }
+    return p
+  }
+
+  test('a 1 MB attachment in a 5 M-character quota (Chrome): current is always written, backups make room, a restore keeps the files', () => {
+    const storage = new QuotaStorage()
+    storage.quota = 5 * 1024 * 1024
+    let now = 1_000_000
+    let unavailable = 0
+    const auto = new Autosave({ storage, now: () => now, onUnavailable: () => unavailable++ })
+    const p = withAttachment(1024 * 1024)
+    for (let i = 0; i < 8; i++) {
+      p.name = 'Edit ' + i
+      expect(auto.saveNow(structuredClone(p))).toBe(true)
+      now += 61_000
+    }
+    expect(unavailable).toBe(0)
+    const backups = [0, 1, 2, 3, 4].filter((n) => storage.getItem(backupKey(n)) !== null).length
+    expect(backups).toBeGreaterThanOrEqual(2)
+    expect(backups).toBeLessThanOrEqual(3)
+    const b = new Autosave({ storage }).boot('')
+    expect(b.project.name).toBe('Edit 7')
+    expect(b.project.defs.d_scad).toMatchObject({ lang: 'openscad', files: { 'lib.scad': expect.stringMatching(/^x = 1;/) } })
+    expect(b.project.defs.d_scad.kind === 'code' && b.project.defs.d_scad.params).toEqual([])
+  })
+
+  test('a project larger than the whole quota: the save fails once, gracefully (Autosave unavailable)', () => {
+    const storage = new QuotaStorage()
+    storage.quota = 5 * 1024 * 1024
+    let unavailable = 0
+    const auto = new Autosave({ storage, onUnavailable: () => unavailable++ })
+    const p = withAttachment(1024 * 1024)
+    p.defs.d_scad.kind === 'code' && Object.assign(p.defs.d_scad.files!, { 'a.scad': 'z'.repeat(2_500_000), 'b.scad': 'z'.repeat(2_500_000) })
+    expect(auto.saveNow(p)).toBe(false)
+    expect(auto.saveNow(p)).toBe(false)
+    expect(unavailable).toBe(1)
+  })
+})
+
 describe('clipboard', () => {
   test('clipFromPath snapshots the instance; Clipboard copies on get/set', () => {
     const p = sampleProject()

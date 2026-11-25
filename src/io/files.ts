@@ -14,26 +14,37 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 1500)
 }
 
-/** Hidden <input type=file accept=…>; resolves with the chosen file, or null when the picker is cancelled. */
-export function pickFile(accept: string): Promise<File | null> {
+/** Hidden <input type=file accept=…> (multiple: several files); resolves with the chosen files, [] when cancelled. */
+function pick(accept: string, multiple: boolean): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = accept
+    input.multiple = multiple
     input.style.display = 'none'
     input.setAttribute('data-testid', 'file-input')
     let done = false
-    const finish = (f: File | null) => {
+    const finish = (f: File[]) => {
       if (done) return
       done = true
       input.remove()
       resolve(f)
     }
-    input.addEventListener('change', () => finish(input.files?.[0] ?? null))
-    input.addEventListener('cancel', () => finish(null))
+    input.addEventListener('change', () => finish(Array.from(input.files ?? [])))
+    input.addEventListener('cancel', () => finish([]))
     document.body.appendChild(input)
     input.click()
   })
+}
+
+/** Hidden <input type=file accept=…>; resolves with the chosen file, or null when the picker is cancelled. */
+export function pickFile(accept: string): Promise<File | null> {
+  return pick(accept, false).then((f) => f[0] ?? null)
+}
+
+/** Like pickFile, choosing several files at once; [] when cancelled. */
+export function pickFiles(accept: string): Promise<File[]> {
+  return pick(accept, true)
 }
 
 const TREE_TYPE = 'application/x-3dica'
@@ -46,10 +57,11 @@ function isFileDrag(e: DragEvent): boolean {
 }
 
 /**
- * Calls `cb` with a file dropped anywhere on the window. Tree drags (application/x-3dica) are ignored. While a file
- * is dragged over the window, <body> gets the class `drop-file` (styles.css shows an overlay). Returns unsubscribe.
+ * Calls `cb` with the files dropped anywhere on the window (the first one, and all of them). Tree drags
+ * (application/x-3dica) are ignored. While a file is dragged over the window, <body> gets the class `drop-file`
+ * (styles.css shows an overlay). Returns unsubscribe.
  */
-export function onWindowDrop(cb: (file: File) => void): () => void {
+export function onWindowDrop(cb: (file: File, all: File[]) => void): () => void {
   let depth = 0
   const clear = () => { depth = 0; document.body.classList.remove('drop-file') }
   const enter = (e: DragEvent) => {
@@ -71,8 +83,8 @@ export function onWindowDrop(cb: (file: File) => void): () => void {
     if (!isFileDrag(e)) return
     e.preventDefault()
     clear()
-    const f = e.dataTransfer?.files?.[0]
-    if (f) cb(f)
+    const all = Array.from(e.dataTransfer?.files ?? [])
+    if (all.length) cb(all[0], all)
   }
   window.addEventListener('dragenter', enter)
   window.addEventListener('dragover', over)
@@ -90,4 +102,4 @@ export function onWindowDrop(cb: (file: File) => void): () => void {
 }
 
 /** The FilesApi object for AppContext.files. */
-export const files: FilesApi = { downloadBlob, pickFile, onWindowDrop }
+export const files: FilesApi = { downloadBlob, pickFile, pickFiles, onWindowDrop }

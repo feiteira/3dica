@@ -42,7 +42,7 @@ function makeCtx(boxes: Record<string, Box> = {}) {
     retry: vi.fn(), get: vi.fn(() => undefined),
     exportStl: vi.fn(async () => ({ parts: [new ArrayBuffer(84)], tris: 0 })),
   } as unknown as EvalClientApi
-  const files: FilesApi = { downloadBlob: vi.fn(), pickFile: vi.fn(async () => null), onWindowDrop: vi.fn(() => () => {}) }
+  const files: FilesApi = { downloadBlob: vi.fn(), pickFile: vi.fn(async () => null), pickFiles: vi.fn(async () => [] as File[]), onWindowDrop: vi.fn(() => () => {}) }
   const confirm = vi.fn(async () => true)
   const problems = vi.fn()
   const ctx = {
@@ -406,5 +406,109 @@ describe('commands: files (§6)', () => {
     await c.loadSample()
     expect(store.project.name).toBe('Bracket kit')
     expect(store.ui.expanded).toEqual(SAMPLE_EXPANDED)
+  })
+})
+
+describe('commands: OpenSCAD objects', () => {
+  const scadFile = (name: string, text: string) => new File([text], name, { type: 'text/plain' })
+  const defNamed = (store: Store, name: string) => Object.values(store.project.defs).find((d) => d.name === name)
+
+  it('import: one object per main file, its includes attached, one undo step, selected', async () => {
+    const { c, store, toasts } = makeCtx()
+    await c.importScad([
+      scadFile('bracket.scad', 'include <gear.scad>\nw = 40; // [10:100]\ngear(w);\n'),
+      scadFile('gear.scad', 'module gear(w) cube(w);\n'),
+    ])
+    const d = defNamed(store, 'bracket')
+    expect(d).toMatchObject({ kind: 'code', lang: 'openscad', files: { 'gear.scad': 'module gear(w) cube(w);\n' } })
+    expect(d?.kind === 'code' && d.params).toEqual([{ name: 'w', type: 'number', default: 40, min: 10, max: 100 }])
+    expect(defNamed(store, 'gear')).toBeUndefined()
+    expect(store.history.labels().past).toEqual(['Import bracket.scad'])
+    const sel = store.ui.selection
+    expect(sel.kind === 'occ' && instanceAtPath(store.project, sel.path)?.def).toBe(d?.id)
+    expect(toasts.filter((t) => t.kind !== 'info')).toEqual([])
+    store.undo()
+    expect(defNamed(store, 'bracket')).toBeUndefined()
+  })
+
+  it('import: name collisions get a suffix; missing includes, big and non-.scad files get a toast', async () => {
+    const { c, store, toasts } = makeCtx()
+    const big = scadFile('big.scad', 'x'.repeat(10))
+    Object.defineProperty(big, 'size', { value: 3 * 1024 * 1024 })
+    await c.importScad([scadFile('Bolt.scad', 'use <nut.scad>\ncube(1);'), scadFile('notes.txt', 'hi'), big])
+    expect(defNamed(store, 'Bolt 2')).toMatchObject({ lang: 'openscad' })
+    expect(toasts.map((t) => t.msg)).toEqual(expect.arrayContaining([
+      "Only .scad files can be imported — skipped 'notes.txt'",
+      "'big.scad' is larger than 2 MB — skipped",
+      "'Bolt 2' needs 'nut.scad' — attach it in the Inspector",
+    ]))
+  })
+
+  it('import of several main files is one step; dropFiles routes .scad to import and the rest to open', async () => {
+    const { c, store, problems } = makeCtx()
+    await c.dropFiles([scadFile('a.scad', 'cube(1);'), scadFile('b.scad', 'sphere(1);')])
+    expect(store.history.labels().past).toEqual(['Import 2 files'])
+    expect(defNamed(store, 'a')).toBeDefined()
+    await c.dropFiles([new File(['{"format":"nope"}'], 'x.json')])
+    expect(problems).toHaveBeenCalledWith("Can't open x.json", expect.any(Array))
+  })
+
+  it('attach fills a missing include, replace keeps the path, remove takes it away, each one step', async () => {
+    const { c, store } = makeCtx()
+    await c.importScad([scadFile('main.scad', 'include <lib/gear.scad>\ncube(1);')])
+    const id = defNamed(store, 'main')!.id
+    await c.attachScadFiles(id, undefined, [scadFile('gear.scad', 'g = 1;')])
+    expect((store.project.defs[id] as any).files).toEqual({ 'lib/gear.scad': 'g = 1;' })
+    await c.attachScadFiles(id, 'lib/gear.scad', [scadFile('other-name.scad', 'g = 2;')])
+    expect((store.project.defs[id] as any).files).toEqual({ 'lib/gear.scad': 'g = 2;' })
+    c.removeScadFile(id, 'lib/gear.scad')
+    expect((store.project.defs[id] as any).files).toBeUndefined()
+    // the second one replaced the attached file: the history says so
+    expect(store.history.labels().past).toEqual(['Import main.scad', 'Attach gear.scad', 'Replace gear.scad', 'Remove gear.scad'])
+  })
+
+  it('Windows line ends are read as \\n (import, drop and attach)', async () => {
+    const { c, store } = makeCtx()
+    await c.importScad([scadFile('win.scad', 'include <lib.scad>\r\nw = 20; // [10:50]\r\ncube(w);\r\n'), scadFile('lib.scad', 'a = 1;\r\rb = 2;\r\n')])
+    const d = defNamed(store, 'win') as any
+    expect(d.code).toBe('include <lib.scad>\nw = 20; // [10:50]\ncube(w);\n')
+    expect(d.files).toEqual({ 'lib.scad': 'a = 1;\n\nb = 2;\n' })
+    await c.attachScadFiles(d.id, 'lib.scad', [scadFile('lib.scad', 'a = 3;\r\n')])
+    expect((store.project.defs[d.id] as any).files).toEqual({ 'lib.scad': 'a = 3;\n' })
+  })
+
+  it('a default edit rewrites the literal in the code ("Change w"); export and download give .scad files', async () => {
+    const { c, store, files } = makeCtx()
+    await c.importScad([scadFile('box.scad', 'w = 10; // [1:50]\ncube(w);\n')])
+    const id = defNamed(store, 'box')!.id
+    expect(c.setScadParamDefault(id, 'w', 22)).toBeNull()
+    expect((store.project.defs[id] as any).code).toBe('w = 22; // [1:50]\ncube(w);\n')
+    expect(store.history.labels().past.at(-1)).toBe('Change w')
+    expect(c.setScadParamDefault(id, 'w', 'x' as never)).toBe("Invalid value for 'w': it must be a finite number")
+    expect(c.setParamDefs(id, [])).toMatch(/come from the top-level assignments/)
+    c.exportScad(id)
+    const call = vi.mocked(files.downloadBlob).mock.calls.at(-1)!
+    expect(call[1]).toBe('box.scad')
+    expect(await (call[0] as Blob).text()).toBe('w = 22; // [1:50]\ncube(w);\n')
+  })
+
+  it('several imported objects are put side by side once evaluated, in the same undo step', async () => {
+    const { c, store, viewport } = makeCtx()
+    vi.mocked(viewport.occurrenceBox).mockImplementation(() => ({ min: [0, 0, 0], max: [10, 10, 10] }))
+    await c.importScad([scadFile('a.scad', 'cube(10);'), scadFile('b.scad', 'cube(10);')])
+    await new Promise((r) => setTimeout(r, 0))
+    const root = store.project.defs[store.project.root]
+    const xs = root.kind === 'group' ? root.children.slice(-2).map((i) => i.xf.t[0]) : []
+    expect(xs).toEqual([20, 35])
+    expect(store.history.labels().past).toEqual(['Import 2 files'])
+    store.undo()
+    expect(defNamed(store, 'a')).toBeUndefined()
+  })
+
+  it('the OpenSCAD template', () => {
+    const { c, store } = makeCtx()
+    c.addTemplate('openscad')
+    expect(store.history.labels().past).toEqual(['Add OpenSCAD'])
+    expect(Object.values(store.project.defs).find((d) => d.kind === 'code' && d.lang === 'openscad')).toMatchObject({ name: 'Object' })
   })
 })

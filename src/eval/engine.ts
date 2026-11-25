@@ -5,14 +5,20 @@
 // Every exception is wrapped ONCE, at the innermost def being evaluated, into an EvalFailure and then rethrown unchanged
 // through the outer part() calls, so error.def is the def whose code actually failed and error.trace lists the def
 // names from the job root down to it.
+// OpenSCAD code (CodeSpec.lang 'openscad') is never compiled: src/openscad interprets it (runScad, handed in with
+// setScad), with part() and the geometry budget wired to the same memo and limits.
 import jscad from '@jscad/modeling'
 import stlSerializer from '@jscad/stl-serializer'
 import type { Geom3 } from '@jscad/modeling/src/geometries/types'
 import type { Id, Mat4, ParamDef, ParamValue } from '../core/types'
 import type { CodeSpec, DefSpec, GroupSpec, Job } from '../core/evalspec'
-import type { EvalError, MeshData } from './protocol'
+import type { ConsoleLine, EvalError, MeshData } from './protocol'
+import type { RunScad, ScadMessage, SourcePos } from '../openscad/types'
+// the error class only (types.ts has no other runtime code); the interpreter itself is handed in with setScad()
+import { ScadError } from '../openscad/types'
 import { hash, mulberry32, seedFromKey } from '../core/hash'
 import { isValidParamValue, resolveParamDefs, unknownParamKeys } from '../core/params'
+import { choiceOption } from '../openscad/customizer'
 import { identity, matricesClose } from '../core/transform'
 
 // ───────────────────────────── scope (§3.1) ─────────────────────────────
@@ -192,7 +198,7 @@ export class EvalFailure extends Error {
 /** Any thrown value → EvalError (EvalFailure as is; anything else is a runtime error of `root`, without a line). */
 export function toEvalError(x: unknown, root: { def: Id; name: string }): EvalError {
   if (x instanceof EvalFailure) return x.error
-  return { kind: 'runtime', def: root.def, defName: root.name, message: errorMessage(x), trace: [root.name] }
+  return { kind: 'runtime', def: root.def, defName: root.name, message: clip(errorMessage(x)), trace: [root.name] }
 }
 
 function errorMessage(x: unknown): string {
@@ -228,6 +234,61 @@ function typeDescription(pd: ParamDef): string {
 }
 
 function unique(list: string[]): string[] { return [...new Set(list)] }
+
+// ───────────────────────────── OpenSCAD console ─────────────────────────────
+
+/** Lines kept per result (the interpreter already shortens a huge echo). */
+export const MAX_CONSOLE_LINES = 1000
+/** Longest echo line passed on, and longest warning, error or other message: texts built from the model's data can
+ *  be huge (a 3-line file made a 50 MB assert message), and they end up in the page, the Output panel and MCP. */
+const MAX_ECHO_CHARS = 100_000
+export const MAX_MESSAGE_CHARS = 10_000
+const clip = (s: string, max = MAX_MESSAGE_CHARS): string => (s.length > max ? s.slice(0, max) + ' … (cut)' : s)
+/** The interpreter's note about the console lines it did not keep (src/openscad/interp.ts, noteDropped). */
+const DROPPED_NOTE = /^([\d,]+) more console lines were not kept\b/
+const droppedBy = (m: ScadMessage): number => {
+  const n = m.level === 'warning' && !m.pos ? DROPPED_NOTE.exec(m.text) : null
+  return n ? Number(n[1].replace(/,/g, '')) : -1
+}
+/** OpenSCAD warnings repeated in the result's warnings (the status line, MCP reports); all of them are in the console. */
+const MAX_SCAD_WARNINGS = 20
+
+/** A thrown ScadError, also one from another copy of the class (the interpreter is loaded separately). */
+function isScadError(x: unknown): x is ScadError {
+  return x instanceof Error && x.name === 'ScadError' && typeof (x as { kind?: unknown }).kind === 'string'
+}
+
+function posFields(pos?: SourcePos): Pick<ConsoleLine, 'line' | 'col' | 'file'> {
+  if (!pos) return {}
+  const o: Pick<ConsoleLine, 'line' | 'col' | 'file'> = { line: pos.line, col: pos.col }
+  if (pos.file) o.file = pos.file
+  return o
+}
+
+function consoleLines(messages: readonly ScadMessage[] | undefined): ConsoleLine[] {
+  const out: ConsoleLine[] = []
+  // one count of what was left out: the lines past MAX_CONSOLE_LINES plus those the interpreter did not keep
+  let hidden = 0
+  for (const m of messages ?? []) {
+    const dropped = droppedBy(m)
+    if (dropped >= 0) { hidden += dropped; continue }
+    if (out.length >= MAX_CONSOLE_LINES) { hidden++; continue }
+    const echo = m.level === 'echo'
+    out.push({ level: echo ? 'echo' : 'warning', text: clip(String(m.text), echo ? MAX_ECHO_CHARS : MAX_MESSAGE_CHARS), ...posFields(m.pos) })
+  }
+  if (hidden) out.push({ level: 'warning', text: `… ${thousands(hidden)} more lines not shown (the limit is ${thousands(MAX_CONSOLE_LINES)})` })
+  return out
+}
+
+/** "text (line 4)" / "text (lib/gear.scad:4)" */
+function located(text: string, pos?: SourcePos): string {
+  if (!pos) return text
+  return `${text} (${pos.file ? `${pos.file}:${pos.line}` : `line ${pos.line}`})`
+}
+
+function scadHint(what: string): string {
+  return what.includes('$fn') ? ' — lower $fn' : what.includes('$fa') || what.includes('$fs') ? ' — raise $fa / $fs' : ''
+}
 
 // ───────────────────────────── geometry → arrays (verified geom3ToArrays + bbox) ─────────────────────────────
 
@@ -293,7 +354,11 @@ export function stlTriangleCount(parts: ArrayBuffer[]): number {
 
 // ───────────────────────────── the engine (§5.4) ─────────────────────────────
 
-interface MemoEntry { geoms: Geom3[]; warnings: string[]; /** polygon vertices (memo size budget) */ cost: number }
+interface MemoEntry {
+  geoms: Geom3[]; warnings: string[]; /** polygon vertices (memo size budget) */ cost: number
+  /** OpenSCAD code: its console output (echo, warnings) */
+  console?: ConsoleLine[]
+}
 
 /** Sum of polygon vertices of `geoms` (an estimate of their memory; transformed copies count again). */
 function vertexCost(geoms: Geom3[]): number {
@@ -305,6 +370,8 @@ function vertexCost(geoms: Geom3[]): number {
 export interface EngineOptions {
   /** memo size budget in polygon vertices (default MEMO_MAX_VERTICES) */
   memoMaxVertices?: number
+  /** the OpenSCAD runtime (src/openscad runScad); the worker loads it on first use and hands it in with setScad */
+  scad?: RunScad
 }
 
 export interface EngineStats { compiled: number; memo: number; hits: number; misses: number }
@@ -314,15 +381,27 @@ export interface Engine {
   lineOffset: number
   /** Geometry of `spec` with `params` in the def's own local coordinates; throws EvalFailure. Returns a fresh array. */
   evaluate(spec: DefSpec, params: Record<string, ParamValue>): Geom3[]
-  /** evaluate + validate + toMeshes */
-  run(job: Job): { meshes: MeshData[]; tris: number; warnings: string[] }
+  /** evaluate + validate + toMeshes (console: an OpenSCAD job's echo / warning output) */
+  run(job: Job): { meshes: MeshData[]; tris: number; warnings: string[]; console?: ConsoleLine[] }
   /** Binary STL of every item's geometry transformed by its matrix (solids are not unioned). */
   stl(items: { job: Job; matrix: Mat4 }[]): { parts: ArrayBuffer[]; tris: number }
   stats(): EngineStats
+  /** Install the OpenSCAD runtime (OpenSCAD specs fail with a runtime error until then). */
+  setScad(run: RunScad): void
+  hasScad(): boolean
+}
+
+/** Whether evaluating `spec` runs OpenSCAD code anywhere (itself, a part() dependency or a group child). */
+export function usesScad(spec: DefSpec, seen = new Set<string>()): boolean {
+  if (seen.has(spec.defKey)) return false
+  seen.add(spec.defKey)
+  if (spec.kind === 'code') return spec.lang === 'openscad' || Object.values(spec.deps).some((d) => usesScad(d, seen))
+  return spec.children.some((c) => usesScad(c.spec, seen))
 }
 
 export function createEngine(opts: EngineOptions = {}): Engine {
   const memoMaxVertices = opts.memoMaxVertices ?? MEMO_MAX_VERTICES
+  let runScad: RunScad | undefined = opts.scad
   /** code → compiled function, LRU (Map insertion order = recency) */
   const compiled = new Map<string, UserFn>()
   /** hash([defKey, params]) → result, LRU by count (MEMO_MAX) and by size (memoMaxVertices) */
@@ -369,7 +448,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   const failure = (kind: EvalError['kind'], spec: DefSpec, message: string, at?: { line?: number; col?: number }): EvalFailure => {
     const trace = stack.map((s) => s.name)
     if (stack[stack.length - 1] !== spec) trace.push(spec.name) // result checks run after the spec left the stack
-    const e: EvalError = { kind, def: spec.def, defName: spec.name, message, trace }
+    const e: EvalError = { kind, def: spec.def, defName: spec.name, message: clip(message), trace }
     if (at?.line !== undefined && at.line >= 1) { e.line = at.line; if (at.col !== undefined) e.col = at.col }
     return new EvalFailure(e)
   }
@@ -402,11 +481,16 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   const unionIfMany = (list: Geom3[]): Geom3 | null => (list.length === 0 ? null : list.length === 1 ? list[0] : union(list))
 
-  /** part(name, overrides?) bound to one code spec's static dependency set. Nested warnings go into `warnings`. */
+  /**
+   * part(name, overrides?) bound to one code spec's static dependency set. Nested warnings go into `warnings`.
+   * Bad arguments throw plain Errors; the dependency's own failure is an EvalFailure, which passes through unchanged.
+   */
   const makePart = (spec: CodeSpec, warnings: string[]) => (name: unknown, overrides?: unknown): Geom3[] => {
     if (typeof name !== 'string' || !Object.hasOwn(spec.deps, name)) {
       const shown = typeof name === 'string' ? JSON.stringify(name) : String(name)
-      throw new Error(`part(${shown}): not a dependency of "${spec.name}" — call part with a string literal, e.g. part('Bolt')`)
+      throw new Error(spec.lang === 'openscad'
+        ? `part(${shown}): not a dependency of "${spec.name}" — write the name as a string literal, e.g. part("Bolt"), and check that an object with that name exists`
+        : `part(${shown}): not a dependency of "${spec.name}" — call part with a string literal, e.g. part('Bolt')`)
     }
     const dep = spec.deps[name]
     if (overrides !== undefined && overrides !== null && (typeof overrides !== 'object' || Array.isArray(overrides))) {
@@ -422,11 +506,17 @@ export function createEngine(opts: EngineOptions = {}): Engine {
         const known = dep.paramDefs.map((p) => p.name).join(', ')
         throw new Error(`part("${name}"): unknown ${plural(unknown.length, 'parameter')} ${unknown.map((k) => `"${k}"`).join(', ')} — "${name}" has ${known ? 'parameters ' + known : 'no parameters'}`)
       }
+      const given: Record<string, unknown> = { ...ov }
       for (const pd of dep.paramDefs) {
-        const v = ov[pd.name]
+        let v = given[pd.name]
+        // an OpenSCAD dropdown also takes its item's value: part("plate", holes = 3), part('box', { size: 30 })
+        if (v !== undefined && pd.type === 'choice' && dep.kind === 'code' && dep.lang === 'openscad' && !isValidParamValue(pd, v) && (typeof v === 'number' || typeof v === 'string')) {
+          const o = choiceOption(dep.code, pd.name, v)
+          if (o !== null) given[pd.name] = v = o
+        }
         if (v !== undefined && !isValidParamValue(pd, v)) throw new Error(`part("${name}"): ${pd.name} must be ${typeDescription(pd)}`)
       }
-      params = resolveParamDefs(dep.paramDefs, ov as Record<string, ParamValue>)
+      params = resolveParamDefs(dep.paramDefs, given as Record<string, ParamValue>)
     }
     const r = evalEntry(dep, params)
     for (const w of r.warnings) warnings.push(`${dep.name}: ${w}`)
@@ -443,7 +533,85 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     return items as Geom3[]
   }
 
+  /** A thrown OpenSCAD error → EvalFailure: line / col in the object's own code, 'file:line: ' prefix for an attached file. */
+  const scadFailure = (spec: CodeSpec, x: unknown): EvalFailure => {
+    if (!isScadError(x)) {
+      const f = failure('runtime', spec, errorMessage(x))
+      f.error.console = [{ level: 'error', text: f.error.message }]
+      return f
+    }
+    const pos = x.pos
+    const own = pos !== undefined && pos.file === ''
+    const message = (pos && !own ? `${pos.file}:${pos.line}: ` : '') + x.message
+    const e = failure(x.kind === 'syntax' ? 'syntax' : 'runtime', spec, message, pos && own ? { line: pos.line, col: pos.col } : undefined).error
+    e.console = [
+      ...consoleLines(x.messages),
+      { level: 'error', text: clip(x.message), ...posFields(pos) },
+      ...(x.trace ?? []).map((t): ConsoleLine => ({ level: 'trace', text: clip(`called by ${t}`) })),
+    ]
+    return new EvalFailure(e)
+  }
+
+  /**
+   * The OpenSCAD builder's charge(): polygons it is about to create count towards the same per-evaluation budget as
+   * JSCAD's creating functions, so a runaway model stops while it is still allocating.
+   */
+  const chargeScad = (n: number, what: string, pos?: SourcePos): void => {
+    if (!(n <= MAX_TRIANGLES)) {
+      throw new ScadError('limit', `Too much geometry: ${what} makes about ${thousands(Math.round(n))} polygons (the limit is ${thousands(MAX_TRIANGLES)} triangles)${scadHint(what)}`, pos)
+    }
+    budget.created += n
+    if (budget.created > MAX_SOURCE_POLYGONS) {
+      throw new ScadError('limit', `Too much geometry: this code made more than ${thousands(MAX_SOURCE_POLYGONS)} polygons (a loop that never ends?) — stopped before the page runs out of memory`, pos)
+    }
+  }
+
+  /** OpenSCAD code: interpret + build in src/openscad, with part() and the geometry budget wired to this engine. */
+  const evalScad = (spec: CodeSpec, params: Record<string, ParamValue>, key: string): MemoEntry => {
+    if (!runScad) throw failure('runtime', spec, 'The OpenSCAD interpreter is not loaded')
+    const nested: string[] = []
+    const part = makePart(spec, nested)
+    let geoms: Geom3[]
+    let messages: ScadMessage[]
+    try {
+      const r = runScad(spec.code, {
+        files: spec.files ?? {},
+        overrides: params,
+        // like Math.random in JSCAD code: seeded per result, so a re-run gives the same shape
+        randomSeed: seedFromKey(key),
+        preview: true,
+        resolvePart: (name, overrides, pos) => {
+          try {
+            return part(name, overrides)
+          } catch (x) {
+            if (x instanceof EvalFailure || isScadError(x)) throw x
+            throw new ScadError('runtime', errorMessage(x), pos) // bad name / overrides: point at the part() call
+          }
+        },
+        charge: chargeScad,
+      })
+      geoms = r.geoms
+      messages = r.messages
+    } catch (x) {
+      if (x instanceof EvalFailure) throw x
+      throw scadFailure(spec, x)
+    }
+    const items: unknown[] = geoms
+    for (const it of items) if (!geom3.isA(it)) throw failure('result', spec, `The OpenSCAD runtime returned ${describeValue(it)} instead of 3D geometry`)
+    // the note about console lines not kept is counted in the Output panel's last line, not repeated as a warning
+    const own = messages.filter((m) => m.level === 'warning' && droppedBy(m) < 0).map((m) => located(clip(m.text), m.pos))
+    const warns = unique(own)
+    const shown = warns.length > MAX_SCAD_WARNINGS ? [...warns.slice(0, MAX_SCAD_WARNINGS), `… and ${warns.length - MAX_SCAD_WARNINGS} more warnings`] : warns
+    return {
+      geoms,
+      warnings: unique([...(geoms.length === 0 ? ['No top-level geometry'] : []), ...shown, ...nested]),
+      console: consoleLines(messages),
+      cost: vertexCost(geoms),
+    }
+  }
+
   const evalCode = (spec: CodeSpec, params: Record<string, ParamValue>, key: string): MemoEntry => {
+    if (spec.lang === 'openscad') return evalScad(spec, params, key)
     let fn: UserFn
     try { fn = compile(spec.code) } catch (x) { throw failure('syntax', spec, syntaxMessage(x)) }
     const seededMath = Object.create(Math) as Math
@@ -540,7 +708,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     }
   }
 
-  const toMeshes = (spec: DefSpec, entry: MemoEntry): { meshes: MeshData[]; tris: number; warnings: string[] } => {
+  const toMeshes = (spec: DefSpec, entry: MemoEntry): { meshes: MeshData[]; tris: number; warnings: string[]; console?: ConsoleLine[] } => {
     const polys = entry.geoms.map((g) => geom3.toPolygons(g)) // applies the lazy transforms
     let tris = 0
     for (const ps of polys) tris += countTriangles(ps)
@@ -555,7 +723,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     })
     const warnings = [...entry.warnings]
     if (entry.geoms.length > 0 && tris === 0) warnings.push('Result has no triangles')
-    return { meshes, tris, warnings }
+    return entry.console ? { meshes, tris, warnings, console: entry.console } : { meshes, tris, warnings }
   }
 
   return {
@@ -576,5 +744,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return { parts, tris: stlTriangleCount(parts) }
     }),
     stats: () => ({ compiled: compiled.size, memo: results.size, hits, misses }),
+    setScad: (run) => { runScad = run },
+    hasScad: () => runScad !== undefined,
   }
 }

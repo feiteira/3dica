@@ -11,6 +11,10 @@ const { length, diameter } = params   // the Bolt's code reads its two parameter
 Only Code definitions have parameters. Groups have none in v0.1: to make a parametric assembly, write it as a Code
 object that builds its pieces with [`part()`](/reference/code-api#part).
 
+An [OpenSCAD object](/guide/openscad) has parameters too, but they come from its code, Customizer style, instead of
+this table. Everything below about overrides, linked copies and `part()` applies to them as well. The differences are
+listed in [OpenSCAD objects](#openscad-objects) at the end of this page.
+
 ## Where you edit them
 
 | What | Where | Affects |
@@ -160,6 +164,27 @@ part('Bolt', { length: 20 })   // Bolt with length 20 and its default diameter
   `part("Fixture"): groups have no parameters`.
 - Each distinct set of values is evaluated once and then served from the cache.
 
+## OpenSCAD objects
+
+An OpenSCAD object's parameters are its top-level assignments of a number, `true` / `false`, or a string with a list
+of options, and Customizer comments such as `// [10:100]` set their range, step or options. The full mapping is in
+[Parameters](/guide/openscad#parameters) of the OpenSCAD guide. What changes compared with a JavaScript object:
+
+| | JavaScript object | OpenSCAD object |
+|---|---|---|
+| Where the list is defined | The **Parameter defaults** table | The code. The table is read-only, except the defaults. |
+| Add, remove, rename, change a range or options | In the table | In the code, then the table follows |
+| Change a default | In the table | In the table, which rewrites the value in the code (`Change length`), or in the code |
+| Description and headings | None | The `//` comment above an assignment, and `/* [Tab] */` comments |
+| What the code gets for a choice | The option text | The drop-down item's value: `screw = 4; // [3:M3, 4:M4]` gets 4 for `M4` |
+| How an override reaches the code | `params.length` | It replaces the assigned value, like `openscad -D length=80` |
+
+Instance overrides, the ● and ↺ controls, stale overrides and `part()` overrides work the same way. In a `part()`
+call, a choice takes its option text in both languages: `part('bracket', { screw: 'M5' })` or
+`part("bracket", screw = "M5")`. A choice of an OpenSCAD object also takes the drop-down item's value, wherever an
+override is typed (`part()`, the AI chat, MCP): `part("bracket", screw = 5)`. A value that is neither is refused with
+the list, as in `Invalid value for 'screw': it must be one of "M3", "M4", "M5"`.
+
 ## In the project file
 
 The definition stores its parameter list, and an instance stores only the values it overrides:
@@ -179,5 +204,6 @@ The definition stores its parameter list, and an instance stores only the values
 { "id": "i_b1", "def": "d_bolt", "xf": { "t": [-23, -13, 5], "r": [0, 0, 0], "s": [1, 1, 1] }, "params": { "length": 16 } }
 ```
 
-A choice parameter also has `"options": ["lip", "flat", "none"]`. See [Files, autosave and STL](/reference/files) for
+A choice parameter also has `"options": ["lip", "flat", "none"]`. An OpenSCAD definition stores its parameter list
+too, but it is read again from the code when the file is opened. See [Files, autosave and STL](/reference/files) for
 the whole format.

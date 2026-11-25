@@ -6,7 +6,7 @@
 // hold no GPU memory while they wait in the cache for a cheap undo.
 import * as THREE from 'three'
 import type { MeshEntry } from '../app/context'
-import type { MeshData } from './protocol'
+import type { ConsoleLine, MeshData } from './protocol'
 import { buildEdges } from './edges'
 
 export const MESH_CACHE_MAX = 300
@@ -16,7 +16,7 @@ export const MESH_CACHE_MAX_BYTES = 256 * 1024 * 1024
 export const EDGE_THRESHOLD_DEG = 30
 
 /** MeshData[] (as posted by the worker) → MeshEntry with one non-indexed BufferGeometry per mesh. */
-export function toMeshEntry(meshes: MeshData[], tris: number, ms: number, warnings: string[]): MeshEntry {
+export function toMeshEntry(meshes: MeshData[], tris: number, ms: number, warnings: string[], console?: ConsoleLine[]): MeshEntry {
   const geometries: THREE.BufferGeometry[] = []
   const baked: (THREE.Color | null)[] = []
   const bbox = new THREE.Box3() // empty until a mesh is added
@@ -31,7 +31,9 @@ export function toMeshEntry(meshes: MeshData[], tris: number, ms: number, warnin
     baked.push(m.color ? new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2], THREE.SRGBColorSpace) : null)
     bbox.union(g.boundingBox)
   }
-  return { geometries, baked, tris, bbox, ms, warnings: [...warnings] }
+  const entry: MeshEntry = { geometries, baked, tris, bbox, ms, warnings: [...warnings] }
+  if (console) entry.console = console
+  return entry
 }
 
 /**

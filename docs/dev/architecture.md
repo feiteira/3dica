@@ -12,12 +12,13 @@ the code is right, and the spec lists the known deviations at the top.
 
 | Directory | Role | Main files |
 |---|---|---|
-| `src/core/` | **Pure logic.** No DOM, no three.js, no Worker. Shared by the main thread and the worker, and unit-tested in Node. | `types.ts` (the data model), `graph.ts` (expansion, paths, `part()` scan, cycles), `ops.ts` (every project mutation), `evalspec.ts` (specs, keys, wanted jobs, status), `params.ts`, `hash.ts`, `project-io.ts` (file format), `selection.ts`, `transform.ts`, `templates.ts`, `sample.ts`, `colors.ts`, `ids.ts` |
+| `src/core/` | **Pure logic.** No DOM, no three.js, no Worker. Shared by the main thread and the worker, and unit-tested in Node. | `types.ts` (the data model), `graph.ts` (expansion, paths, `part()` scan, cycles), `ops.ts` (every project mutation), `evalspec.ts` (specs, keys, wanted jobs, status), `params.ts`, `hash.ts`, `project-io.ts` (file format), `selection.ts`, `transform.ts`, `templates.ts`, `sample.ts`, `colors.ts`, `ids.ts`, `scad.ts` (OpenSCAD objects: derived parameters, attached-file rules, the `part()` scan), `scad-import.ts` (which imported files become objects) |
 | `src/state/` | Application state | `store.ts` (project + UI state, undo), `history.ts`, `autosave.ts`, `clipboard.ts`, `tabs.ts` (other-tab detection) |
 | `src/app/` | Wiring | `context.ts` (the cross-layer interfaces), `commands.ts` (one method per user action), `controller.ts` (the render pass) |
-| `src/eval/` | Evaluation | `protocol.ts` (worker messages), `engine.ts` (runs JSCAD; pure, also runs in Node), `worker.ts` (thin worker shell), `client.ts` (queue, worker lifecycle), `mesh-cache.ts`, `edges.ts` (selection outlines) |
+| `src/eval/` | Evaluation | `protocol.ts` (worker messages), `engine.ts` (runs JSCAD and OpenSCAD code; pure, also runs in Node), `worker.ts` (thin worker shell), `client.ts` (queue, worker lifecycle), `mesh-cache.ts`, `edges.ts` (selection outlines) |
+| `src/openscad/` | The OpenSCAD interpreter and geometry builder. No DOM; the contract is `types.ts` | See [OpenSCAD objects](#openscad-objects) below |
 | `src/view/` | The 3D view (three.js) | `viewport.ts`, `scene-sync.ts`, `materials.ts`, `picking.ts`, `gizmo.ts` |
-| `src/ui/` | Panels and input | `toolbar.ts`, `tree.ts`, `library.ts`, `inspector.ts`, `param-editor.ts`, `code-editor.ts` (CodeMirror 6), `breadcrumb.ts`, `statusbar.ts`, `shortcuts.ts`, `dnd.ts`, `dom.ts` (the `h()` helper, toasts, dialogs), `icons.ts`, `right-tabs.ts` (Inspector / Chat), `chat.ts`, `chat-transcript.ts`, `chat-settings.ts`, `chat-markdown.ts` |
+| `src/ui/` | Panels and input | `toolbar.ts`, `tree.ts`, `library.ts`, `inspector.ts`, `param-editor.ts`, `code-editor.ts` (CodeMirror 6), `scad-lang.ts` (OpenSCAD highlighting and completion), `scad-panel.ts` (an OpenSCAD object's parameter table and files list), `breadcrumb.ts`, `statusbar.ts`, `shortcuts.ts`, `dnd.ts`, `dom.ts` (the `h()` helper, toasts, dialogs), `icons.ts`, `right-tabs.ts` (Inspector / Chat), `chat.ts`, `chat-transcript.ts`, `chat-settings.ts`, `chat-markdown.ts` |
 | `src/io/` | Browser file I/O | `files.ts` (download, file picker, window drop) |
 | `src/agent/` | The in-app AI chat, without DOM | `types.ts` (the contract), `loop.ts` (`ChatController`), `tools.ts`, `prompt.ts`, `settings.ts`, `summary.ts`, `abort.ts`, `adapters.ts`, `providers/` (`anthropic.ts`, `openai-compatible.ts`, `presets.ts`, `common.ts`) |
 | `src/mcp/` | The tool handlers, and the optional bridge to the local MCP server | `handlers.ts` (one handler per tool, used by MCP and the chat), `screenshot.ts`, `config.ts` (opt-in), `bridge.ts` (WebSocket client) |
@@ -29,9 +30,11 @@ the code is right, and the spec lists the known deviations at the top.
 
 Everything the user makes is one `Project` (`src/core/types.ts`), a plain JSON-serializable object:
 
-- **Definitions** (`defs`, keyed by id). A **Code** definition has `code` and a parameter list. A **Group** definition
-  has `children` (instances) and an `op`: `none`, `union`, `subtract` or `intersect`. The scene itself is the root
-  group, named `Scene`.
+- **Definitions** (`defs`, keyed by id). A **Code** definition has `code` and a parameter list. With
+  `lang: 'openscad'` its code is OpenSCAD source, its parameter list is derived from that code, and an optional
+  `files` map holds the files its `use <…>` and `include <…>` name. A **Group** definition has `children`
+  (instances) and an `op`: `none`, `union`, `subtract` or `intersect`. The scene itself is the root group, named
+  `Scene`.
 - **Instances** are placements inside a group: which definition, a transform `xf` (`t`, `r` in degrees, `s`), and
   optionally a label, a color, parameter overrides and a hidden flag.
 - **Occurrences** are not stored. They are computed by `expand()` in `core/graph.ts`: one per drawn copy, identified by
@@ -56,7 +59,7 @@ paused flag) lives next to it in the store.
                                     │                                        ▲
                          client.want(jobs)                          client.onChange
                                     ▼                                        │
-                              eval/client.ts ── postMessage ──▶ eval/worker.ts ─▶ eval/engine.ts (JSCAD)
+                              eval/client.ts ── postMessage ──▶ eval/worker.ts ─▶ eval/engine.ts (JSCAD, OpenSCAD)
                                  mesh cache ◀── meshes (transferred Float32Arrays) ──┘
                                     │
                                     ▼
@@ -92,8 +95,9 @@ specs, wanted jobs, statuses, counts). Treat it as immutable.
 `buildSpecs(project)` (`core/evalspec.ts`) turns every definition into a self-contained **DefSpec**:
 
 - A `CodeSpec` holds the code, the parameter definitions and, under `deps`, the specs of every definition its code
-  names in a `part()` call. The names come from the static scan in `core/graph.ts` (`staticRefs`, which ignores
-  comments).
+  names in a `part()` call. The names come from the static scan in `core/graph.ts` (`defRefs`: `staticRefs` for
+  JavaScript, which ignores comments, and a token scan of the code and the attached files it reaches for OpenSCAD).
+  An OpenSCAD spec also carries `lang` and its `files`.
 - A `GroupSpec` holds the op and its **visible** children, each with its spec, resolved parameters and transform
   matrix.
 
@@ -106,14 +110,15 @@ A **Job** is `{ resultKey, spec, params }` with the parameters already resolved 
 
 ```text
 CodeSpec  defKey = hash(['code', ENGINE, code, params.map(p => [name, type, default (, options for a choice)]),
-                         sortedDeps.map(([name, spec]) => [name, spec.defKey])])
+                         sortedDeps.map(([name, spec]) => [name, spec.defKey])
+                         (, 'openscad', hash(sortedFiles.map(([path, text]) => [path, text]))   OpenSCAD code only)])
 GroupSpec defKey = hash(['group', ENGINE, op, visibleChildren.map(c => [c.spec.defKey, c.params, c.matrix])])
 resultKey        = hash([defKey, resolvedParams])
 ```
 
 - `hash` is two 53-bit cyrb53 hashes of a stable stringification: sorted object keys, `-0` written as `0`, and
   4×4 matrices rounded to 1e-9 (`core/hash.ts`).
-- `ENGINE` (`'jscad-2.13.0/e1'`) is part of every key. Bump it when a JSCAD upgrade or an engine change should
+- `ENGINE` (`'jscad-2.13.0/e2'`) is part of every key. Bump it when a JSCAD upgrade or an engine change should
   invalidate every result.
 - Names, colors and min/max/step are **not** in the keys. Renaming or recoloring never re-evaluates.
 - Keys are Merkle-style: a `part()` dependency's key is inside its caller's key, and a child's key is inside its group's
@@ -168,6 +173,9 @@ for the unit tests.
 - `Math.random` is a mulberry32 generator seeded from the result key.
 - Every exception is wrapped once, at the innermost definition being evaluated, into an `EvalError` that names that
   definition and the trace of names above it.
+- OpenSCAD code is never compiled: the engine hands it to `runScad` from `src/openscad` (see below). The worker loads
+  that module as a separate chunk the first time a job needs it (`usesScad(spec)`), so projects without OpenSCAD
+  objects start as fast as before.
 - The geometry guards wrap the creating JSCAD functions: an estimate refuses an oversized call before it allocates,
   and a per-evaluation budget stops code that creates more than 2,000,000 polygons. Results above 2,000,000
   triangles fail.
@@ -185,7 +193,7 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: 'ready'; lineOffset: number; flatNames: number }
-  | { type: 'result'; id: number; resultKey: string; ok: true;  meshes: MeshData[]; tris: number; ms: number; warnings: string[] }
+  | { type: 'result'; id: number; resultKey: string; ok: true;  meshes: MeshData[]; tris: number; ms: number; warnings: string[]; console?: ConsoleLine[] }
   | { type: 'result'; id: number; resultKey: string; ok: false; error: EvalError; ms: number }
   | { type: 'stl';    id: number; ok: true;  parts: ArrayBuffer[]; tris: number }
   | { type: 'stl';    id: number; ok: false; error: EvalError }
@@ -200,6 +208,11 @@ export interface EvalError {
   def: Id; defName: string          // the def whose code actually failed (innermost)
   message: string; line?: number; col?: number
   trace: string[]                   // def names from the job root to the failing def
+  console?: ConsoleLine[]           // OpenSCAD: the output before the error, the error and its call trace
+}
+export interface ConsoleLine {      // one line of an OpenSCAD object's Output panel
+  level: 'echo' | 'warning' | 'error' | 'trace'
+  text: string; line?: number; col?: number; file?: string
 }
 ```
 
@@ -217,6 +230,94 @@ mesh: semi-transparent while the new one is pending, tinted red when it failed. 
 The gizmo (`view/gizmo.ts`) moves the three.js objects directly during a drag, copying the transform to every object of
 the same instance so that linked copies move together, and only calls `commands.commitGizmo` on release. That
 release is the one store update, and the one undo step, of the drag.
+
+## OpenSCAD objects
+
+An OpenSCAD object is a code definition with `lang: 'openscad'`. Its code is never run as JavaScript: `src/openscad`
+interprets it and builds its geometry, and the engine treats the result like any other code result (memo, meshes,
+STL, `part()`). The contract between the pieces is `src/openscad/types.ts`.
+
+```text
+ main thread                                      eval worker
+ ───────────                                      ───────────
+ core/scad.ts                                     eval/engine.ts  evalScad(spec, params, key)
+   scadParams(code)  ◀─ openscad/customizer.ts      │  runScad(code, { files, overrides: params, randomSeed,
+   scadRefs(code, files)  (part() scan)              │           preview: true, resolvePart, charge })
+   scadDepList(code, files)  ◀─ openscad/deps.ts     ▼
+ core/scad-import.ts  (Import plan)               openscad/index.ts  runScad = interpret + build
+ ui/scad-lang.ts, ui/scad-panel.ts                  │
+                                                     ├─ interpret(source, opts) → { nodes: GeomNode[], messages }
+                                                     │    lexer → parser → plan (include / use) → interp
+                                                     │    (scope, values, builtins, modules, format, rng)
+                                                     └─ build(nodes, ctx) → { geoms: Geom3[], warnings }
+                                                          build-2d, build-tri, build-offset, build-extrude,
+                                                          build-project, build-csg, build-face, minkowski,
+                                                          tess, text
+```
+
+- **Parameters are derived.** The code is the single source of truth. `core/scad.ts` calls `extractParams()` (the
+  Customizer reader, which needs only the tokenizer) whenever the code changes: in `ops.addDef`, `ops.setCode`, a
+  rename that rewrites `part()` calls, and `project-io` on load. `ops.setParamDefs` refuses an OpenSCAD definition,
+  and `ops.setScadParamDefault` rewrites one literal in the code with `setParamDefault()`. The main thread imports only
+  `customizer.ts`, `lexer.ts`, `deps.ts` and `paths.ts`, never the interpreter or the builder.
+- **Overrides.** The engine passes the resolved parameters as `InterpretOptions.overrides`. The interpreter replaces
+  the value of that top-level assignment, as `openscad -D` does, and maps a choice option back to its value.
+- **interpret** turns source into a CSG tree of `GeomNode`s: one node per built-in module instance, with its
+  arguments evaluated and normalised (`d` → `r`, transforms → one matrix, colour names → RGBA). User modules, loops,
+  `children()` and modifiers are resolved into `group` nodes. `part("Name", …)` becomes a `part` node. It knows nothing
+  about JSCAD.
+- **build** turns that tree into JSCAD `Geom3`s with OpenSCAD's tessellation (`$fn` / `$fa` / `$fs`, sphere rings,
+  extrusion slices), its own 2D engine and 3D booleans, and OpenSCAD's rules for colours and 2D/3D mixing. It knows
+  nothing about the language. A `part` node calls `ctx.resolvePart`, which the engine wires to the same `part()` as
+  JavaScript code, so the static dependency check, the override check and the memo are shared.
+- **Budget.** `build` calls `ctx.charge(polygons, what)` before it creates geometry, and again for any excess after.
+  The engine adds that to the same per-evaluation budget as JSCAD's creating functions, so `Too much geometry` stops a
+  runaway OpenSCAD model while it is still allocating.
+- **Errors and output.** Both sides throw `ScadError` (`syntax`, `runtime` or `limit`) with a `SourcePos`, whose
+  `file` is `''` for the object's own code. The engine turns it into an `EvalError` with a line and column, or a
+  `file:line:` prefix for an attached file, and attaches the console lines (`ScadError.messages`) and the call trace
+  as `EvalError.console`. On success the console lines travel with the result (`console` on the worker message,
+  `MeshEntry.console`) to the Output panel and to the MCP reports.
+- **Caching.** `lang` and the attached files are part of the definition's cache key (above). The random seed for
+  unseeded `rands()` comes from the result key, so a re-run gives the same shape. Inside one run, `build` also caches
+  geometry by content, so a module called many times with the same arguments is built once (and still charged).
+- **Main-thread cost.** An object may carry 200 attached files and 16 MB, and specs are rebuilt on every project
+  change, so nothing there may rescan them each time. The store keeps an unchanged `files` map the same object across
+  snapshots (`shareUnchanged`; ops replace a map, never change one in place), and `evalspec.ts` hashes each map once
+  (a `WeakMap`), `core/scad.ts` keeps the `part()` and include scan per map and code (a `WeakMap`) on top of a scan
+  cache bounded by characters (64 MB), and the Customizer reader remembers the last source it read. The scans are
+  linear: the Customizer keeps its entries in a `Map`, and the fallback text scan counts lines as it goes.
+- **Security.** OpenSCAD source is never passed to `eval`, `new Function` or a string `setTimeout`: the parser is
+  hand-written, and the interpreter turns its syntax tree into plain closures, never into source text. Scopes and namespaces are `Map`s, so names like
+  `__proto__` or `constructor` are ordinary variables. Limits (`InterpretLimits`: call depth, list and string length,
+  values created, steps; plus a token limit in the lexer, a cap of 2,000,000 statements on what `include` expands to,
+  the geometry budget and the worker's timeout) stop runaway code before the tab runs out of memory. Element-wise
+  list arithmetic (`c + c`, `2 * c`, `-c`) is charged before its result is built, with a count that stops at the
+  budget: a list of shared sub-lists can stand for billions of values. Values and expressions quoted in warnings and
+  errors are cut at about 1,000 characters (`shortValue`), and the engine cuts any message at 10,000 and an echo line
+  at 100,000, so a message built from the model's data can't flood the page, the Output panel or MCP. Attached-file paths are checked in `core/scad.ts`: relative, no `..` above
+  the root, no `__proto__` / `constructor` / `prototype` segments, at most 2 MB each.
+- **Bundle.** The interpreter and builder are a separate chunk of the worker, loaded on first use. The main bundle
+  carries only the Customizer reader, the tokenizer and the editor's stream language.
+
+### Fidelity and tests
+
+The reference is the OpenSCAD 2021.01 binary, used as a black box: the behaviour was implemented from the OpenSCAD
+User Manual and compared with the binary's echo output, CSG export and STL export. No OpenSCAD source code and none of
+its bundled `.scad` files are copied into this repository (OpenSCAD is GPL and MCAD is LGPL; 3Dica is MIT). The
+committed tests use our own snippets, with the expected output recorded from the binary:
+
+| Tests | What they check |
+|---|---|
+| `tests/unit/scad-lang*.test.ts` | Console output and CSG trees of a few hundred snippets, against recorded binary output; interpreter details |
+| `tests/unit/scad-customizer.test.ts` | Parameter extraction and default rewriting |
+| `tests/unit/scad-build*.test.ts`, `scad-run.test.ts` | Vertices and volumes against the binary's STL export, tessellation tables, booleans, a 2D fuzz test |
+| `tests/unit/scad-fidelity.test.ts`, `scad-limits.test.ts` | Whole models against recorded volumes; hostile inputs end with a `ScadError` |
+| `tests/unit/openscad-*.test.ts` | Objects, the engine branch (`part()` both ways, budget, errors, console), the editor mode |
+| `tests/e2e/openscad.spec.ts` | Import, the editor and Output panel, overrides, defaults, `part()`, attached files, save and autosave, STL, limits |
+
+When you change the interpreter or the builder, compare with the binary (`openscad -o out.echo`, `-o out.csg`,
+`-o out.stl`, `-D name=value`) on snippets of your own, and record the expected values in a test.
 
 ## Undo model
 

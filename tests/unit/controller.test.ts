@@ -49,7 +49,7 @@ function setup() {
   const toasts: string[] = []
   const ctx: AppContext = {
     store, client, viewport, commands: {} as Commands, controller: null as never, clipboard: new Clipboard(),
-    files: { downloadBlob() {}, pickFile: async () => null, onWindowDrop: () => () => {} },
+    files: { downloadBlob() {}, pickFile: async () => null, pickFiles: async () => [], onWindowDrop: () => () => {} },
     toast: (m) => { toasts.push(m) }, confirm: async () => true, problems() {},
     on: events.on, emit: events.emit, params: readUrlParams('?fresh'),
   }

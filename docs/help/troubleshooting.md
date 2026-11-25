@@ -52,6 +52,8 @@ The most common messages:
 | `Unexpected token …`, `Unexpected end of input` | A syntax error | The editor marks the first spot it cannot parse. Look for a missing bracket or comma just before it. |
 | `depends on "Bolt" (failed)` | A definition used through `part()` failed | Fix the inner definition. Its own error is on its row. |
 
+OpenSCAD objects have their own messages: see [OpenSCAD objects](#openscad-objects) below.
+
 The [Code API](/reference/code-api) page lists every message the engine produces.
 
 ## "Unknown part" and "not a dependency"
@@ -87,6 +89,47 @@ the structure if it really is that deep.
 
 The Scene tree refuses moves and drops that would put a group inside itself, with a message such as
 `Can't put 'Fixture' inside itself` or `Can't move 'Fixture' inside itself`. Put the object somewhere else.
+
+## OpenSCAD objects
+
+An [OpenSCAD object](/guide/openscad) shows its errors like any code object, in the gutter and the status line, and
+also in its **Output** panel, with the `echo()` lines and warnings that came before the error. The messages use
+OpenSCAD's own wording where OpenSCAD has one.
+
+| Message | Cause | Fix |
+|---|---|---|
+| `Can't open include file 'gear.scad'`, `Can't open library 'gear.scad'` | An `include <…>` or `use <…>` names a file that is not attached to the object | Attach it: **Attach…** on its row in the Inspector's **Files** list. See [Attached files](/guide/openscad#attached-files). |
+| `Parser error: syntax error, expected ')', found ';'` | A syntax error | The gutter marks the spot. A bracket, string or comment left open at the end of the file is reported where it was opened. |
+| `lib/gear.scad:12: …` | The error is inside an attached file, at that line | The gutter marks the `use` or `include` line that brings the file in. Download the file from the Files list, fix it, and **Replace** it. |
+| `import() is not supported in 3Dica: OpenSCAD objects cannot read STL, OFF, DXF or SVG files` | `import()`, `surface()`, `dxf_dim()`, `dxf_cross()` or `linear_extrude(file = …)` | Not supported. Model the shape in code, or leave it out. |
+| `Assertion 'x > 0' failed: "…"` | An `assert()` in the code failed | Fix the value it checks. The Output panel shows the calls that led there. |
+| `Recursion too deep calling function 'f' (812 nested calls, as deep as this page can go; OpenSCAD allows about 9,000) — …` (or `module`) | Recursion deeper than the browser's stack allows: about 340–880 function or 200–430 module levels in Chrome, depending on the body. It may be a recursion that would end in OpenSCAD, or one that never ends. | Rewrite the function to be tail-recursive (`f(n, acc) = n == 0 ? acc : f(n - 1, acc + …)`), which has no limit, or use a `for` loop or list comprehension. |
+| `The code ran too long (more than 10,000,000 function calls and loop rounds) — a loop or recursion that never ends?` | A loop or a recursion that never stops, or a very large one | Check the stop condition. |
+| `List too long (more than 1,000,000 elements)`, `String too long …`, `The model creates too much data …` | The code builds huge lists or strings | Usually a runaway loop or recursion. |
+| `Too much geometry: this code made N shapes and transforms …` | Far too many shapes, usually a loop that runs too often | Lower the count. |
+| `Too much geometry: sphere() with $fn = 3000 makes about … polygons … — lower $fn` | One shape would be too detailed | Lower `$fn`, or raise `$fa` and `$fs` when the message says so. |
+| `part("Bolt"): not a dependency of "Rack" — write the name as a string literal, e.g. part("Bolt"), …` | `part()` got its name from a variable | Write `part("Bolt")` with the name in double quotes. |
+| `part("Bolt"): unknown parameter "size" — "Bolt" has parameters length` | A `part()` override names a parameter the definition doesn't have | Use one of the names listed. For a choice parameter, pass the option text (`screw = "M5"`) or, for an OpenSCAD object, the drop-down item's value (`holes = 4`). |
+
+Warnings don't stop the object. They are in the Output panel, and the status line shows the warning, or how many
+different ones there are:
+
+| Warning | Meaning |
+|---|---|
+| `Ignoring unknown variable 'w'`, `Ignoring unknown module 'foo'` | A typo, or a name from a library that is not attached or not used. The value is `undef`, or the module is skipped. |
+| `2D result shown 1 mm thick, like OpenSCAD's preview — use linear_extrude() for a solid` | The code makes only 2D shapes. See [2D results](/guide/openscad#2d-results). |
+| `Mixing 2D and 3D objects is not supported`, `Ignoring 2D child object for 3D operation` | 2D and 3D shapes side by side: the 2D ones are dropped. |
+| `No top-level geometry` | The code makes nothing: no shapes, or every one is empty or disabled with `*`. |
+| `text() draws a built-in single-stroke font, …` | `text()` is approximate. See [What differs from OpenSCAD](/guide/openscad#what-differs-from-openscad). |
+| `Bad range parameter in for statement: too many elements (N)` | A `for` over 1,000,000 values or more is skipped, as in OpenSCAD. |
+
+**A parameter is missing from the table.** Only top-level assignments of a number, `true` / `false`, or a string
+with a list of options, before the first `{` of the file, are parameters. An expression (`w = 2 * h;`), a vector, a
+plain string, an assignment in the `/* [Hidden] */` tab or in an attached file, and a name that starts with a digit or
+is a reserved word in JavaScript are not. See [Parameters](/guide/openscad#parameters).
+
+**The Parameter defaults table can't add or remove rows.** An OpenSCAD object's parameters come from its code. Edit the
+code; the table follows.
 
 ## Timeouts and long evaluations
 
@@ -125,7 +168,8 @@ These limits exist because a worker that runs out of memory takes the whole tab 
 ## Slow booleans
 
 JSCAD's booleans (`union`, `subtract`, `intersect`, and also `hull` and `minkowski`) are much slower than building
-primitives, and their cost grows quickly with the number of polygons. Signs: the status line shows hundreds or
+primitives, and their cost grows quickly with the number of polygons. OpenSCAD objects have faster booleans of their
+own, but the same advice holds: see [Performance](/guide/openscad#performance). Signs: the status line shows hundreds or
 thousands of milliseconds, and the view shows the previous, semi-transparent mesh for a while after each change.
 
 - Lower `segments` on the operands. 32 is plenty for most parts; 64 is smooth.
@@ -236,6 +280,8 @@ The full list of chat messages is in [AI chat › Troubleshooting](/guide/ai-cha
 - **The layout is cramped or cut off.** 3Dica is built for desktop browsers, at least 1,100 pixels wide.
 - **A file does not open.** The dialog lists every problem found, and your current project is untouched. See
   [the file format](/reference/files#the-3dica-json-format) for what a valid file contains.
+- **An imported `.scad` file did not replace the project.** That is intended: **Import** adds OpenSCAD files to the
+  open project, and **Open** is for `.3dica.json` project files.
 
 Still stuck? Search or open an issue at [github.com/feiteira/3dica/issues](https://github.com/feiteira/3dica/issues),
 with the steps to reproduce and, if you can, a small `.3dica.json` that shows the problem.

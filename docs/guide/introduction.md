@@ -1,8 +1,9 @@
 # Introduction
 
-3Dica is a code-CAD workbench that runs in your browser. You describe each part in JavaScript with the
-[JSCAD](https://github.com/jscad/OpenJSCAD.org) modeling library, as you would in OpenSCAD or OpenJSCAD. Then you place
-those parts in a tree as **linked copies**, and you can click, isolate and move them in a 3D view.
+3Dica is a code-CAD workbench that runs in your browser. You describe each part in code, as you would in OpenSCAD or
+OpenJSCAD: in JavaScript with the [JSCAD](https://github.com/jscad/OpenJSCAD.org) modeling library, or in OpenSCAD's
+own language, which 3Dica runs with a built-in interpreter. Then you place those parts in a tree as **linked copies**,
+and you can click, isolate and move them in a 3D view.
 
 ![The 3Dica workbench with the sample project "Bracket kit"](/shots/overview.png)
 
@@ -25,7 +26,7 @@ A 3Dica project has three kinds of things:
 
 | Term | What it is | OpenSCAD analogy |
 |---|---|---|
-| **Definition** | A named, reusable thing. A **code** definition is a JSCAD function body with parameters. A **group** definition holds child instances and has an operation: none (a plain assembly), union, subtract or intersect. | a `module` |
+| **Definition** | A named, reusable thing. A **code** definition is a JSCAD function body with parameters, or OpenSCAD code. A **group** definition holds child instances and has an operation: none (a plain assembly), union, subtract or intersect. | a `module` |
 | **Instance** | One placement of a definition inside a group, with a position, rotation and scale. It can also have a label, a color, parameter overrides and a hidden flag. | one call of a module |
 | **Occurrence** | One copy you actually see. If a group is placed twice, each of its children occurs twice. | one copy in the render |
 
@@ -49,18 +50,19 @@ of them. Here is an honest comparison:
 
 | | OpenSCAD | OpenJSCAD | 3Dica |
 |---|---|---|---|
-| Language | the OpenSCAD language | JavaScript + `@jscad/modeling` | JavaScript + `@jscad/modeling` (the same library) |
+| Language | the OpenSCAD language | JavaScript + `@jscad/modeling` | JavaScript + `@jscad/modeling` (the same library), or the OpenSCAD language (2021.01) per object |
 | Structure | modules in text files | one script | a tree of named definitions, each with its own code |
 | Reusing a part | call the module again | call the function again | a linked instance in the tree, or `part()` in code |
 | Placing a part | edit `translate()` / `rotate()` in code | edit the code | drag the gizmo or type values. Code is optional. |
 | Picking a part in the view | mark it with `#` in the code to highlight it | no | click it, then isolate, ghost or hide it |
-| Parameters | Customizer | parameter UI from `getParameterDefinitions()` | a parameter table per definition, plus overrides per instance |
+| Parameters | Customizer | parameter UI from `getParameterDefinitions()` | a parameter table per definition (from Customizer comments in OpenSCAD code), plus overrides per instance |
 | Geometry kernel | native C++ (CGAL, Manifold) | JavaScript (JSCAD) | JavaScript (JSCAD), in a Web Worker, with results cached |
-| Libraries and includes | yes (BOSL2, MCAD, and others) | yes | no. `part()` reuses definitions in the same project. |
+| Libraries and includes | yes (BOSL2, MCAD, and others) | yes | OpenSCAD objects can `use` and `include` files attached to them. JavaScript objects can't. `part()` reuses definitions in the same project. |
 | Export formats | many (STL, 3MF, OFF, AMF, DXF, SVG, and others) | many (STL, OBJ, 3MF, DXF, SVG, and others) | binary STL |
 | Maturity | over a decade of use | mature | v0.1 |
 
-If you need libraries such as BOSL2, 2D export or very heavy booleans, OpenSCAD is the better tool today. If you want
+If you need large libraries such as BOSL2 (not tested in 3Dica), `import()` of meshes, fonts for `text()`, 2D
+export or very heavy booleans, OpenSCAD is the better tool today. If you want
 to work with a tree of parts you can click on and copy, while keeping code for the shapes, try 3Dica.
 
 ## What 3Dica is not
@@ -68,18 +70,21 @@ to work with a tree of parts you can click on and copy, while keeping code for t
 - **It isn't a sketch-and-constraint CAD.** There are no 2D sketches with constraints, no feature history and no
   fillet tool, as in FreeCAD, Fusion or Onshape. You round an edge in code, for example with `roundedCuboid`,
   `expand` or `minkowski`.
-- **It isn't a sandbox.** Your code runs in a Web Worker, but nothing isolates it from the page: a project's code can
-  do anything a script on a web page can do. When you open a file that contains code, 3Dica asks before running it,
-  so only run files you trust.
+- **It isn't a sandbox.** Your JavaScript code runs in a Web Worker, but nothing isolates it from the page: a project's
+  code can do anything a script on a web page can do. When you open a file that contains code, 3Dica asks before
+  running it, so only run files you trust. (OpenSCAD code is interpreted, never run as JavaScript: it can only make
+  shapes.)
 - **It isn't fast at big booleans.** JSCAD is written in JavaScript. A boolean between two detailed meshes can take
   seconds. 3Dica caches results by content (the 8 bolts of the sample share one mesh), keeps the last good shape on
   screen while you type, and stops runaway code after 20 seconds. It also refuses geometry above 2,000,000 triangles
   before it can take the page down.
-- **It doesn't import or exchange CAD files yet.** Version 0.1 opens and saves its own `.3dica.json` project files
-  and exports binary STL. It can't import STL, STEP or SVG files.
+- **It doesn't exchange CAD files yet.** Version 0.1 opens and saves its own `.3dica.json` project files, imports
+  OpenSCAD `.scad` code as [OpenSCAD objects](/guide/openscad), and exports binary STL. It can't import STL, STEP or
+  SVG files.
 
 ## Next steps
 
 - [Getting started](/guide/getting-started): open the app, find your way around, look at the sample project.
 - [Your first part](/tutorials/first-part): a plate with a hole, made in the tree without writing any code.
 - [Coming from OpenSCAD](/guide/coming-from-openscad): how OpenSCAD concepts and code translate to 3Dica.
+- [OpenSCAD objects](/guide/openscad): import your `.scad` files and keep them as OpenSCAD.

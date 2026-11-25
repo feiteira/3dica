@@ -17,7 +17,7 @@
 
 The right column has two tabs: the **Inspector** with the code editor, and the [Chat](#chat).
 
-The layout needs a window at least 1100 px wide. Below 1440 px most toolbar buttons show only their icon. Below 1560 px the **Manual** link is only its book icon, and below 1500 px the 3Dica name at the left is hidden. While **Run code** is shown, the file buttons (New to STL) show only their icons too. Hover any button for its name and shortcut.
+The layout needs a window at least 1100 px wide. Below 1700 px **Snap**, **Ghost**, **Isolate**, **Frame**, **New**, **Sample** and **STL** show only their icons (**Open**, **Import** and **Save** keep their names), and below 1440 px most other toolbar buttons do too. Below 1560 px the **Manual** link is only its book icon, and below 1500 px the 3Dica name at the left is hidden. While **Run code** is shown, the file buttons (**New** to **STL**) show only their icons as well. Hover any button for its name and shortcut.
 
 ## Toolbar
 
@@ -27,6 +27,7 @@ The layout needs a window at least 1100 px wide. Below 1440 px most toolbar butt
 |---|---|---|
 | **Cube**, **Sphere**, **Cyl**, **Torus** | Add a new primitive to the current group (see [Create](/reference/objects#create)). | |
 | **Code** | Add a new code object named `Object`: a rounded cube under a comment header, ready for your own code. | |
+| **OpenSCAD** | Add a new [OpenSCAD object](/guide/openscad) named `Object`: a cube with a `size` parameter, written in OpenSCAD instead of JavaScript. | |
 | **Group** | Add a new, empty group. | |
 | ∪ | Wrap the selected object in a new **Union** group. | |
 | − | Wrap the selected object in a new **Subtract** group (the first child minus the others). | |
@@ -44,6 +45,7 @@ The layout needs a window at least 1100 px wide. Below 1440 px most toolbar butt
 | **New** | Replace the project with an empty one, after a confirmation. | |
 | **Sample** | Replace the project with the sample *Bracket kit*, after a confirmation. | |
 | **Open** | Open a `.3dica.json` file. You can also drop one anywhere on the window. | <kbd>Ctrl</kbd>+<kbd>O</kbd> |
+| **Import** | Add `.scad` files to the project as [OpenSCAD objects](/guide/openscad#what-import-does), in the current group. Choose several at once: a file that another one uses or includes is attached to it instead of becoming an object. You can also drop `.scad` files on the window. | |
 | **Save** | Download the project as `<name>.3dica.json`. | <kbd>Ctrl</kbd>+<kbd>S</kbd> |
 | **STL** | Export the selection, or the whole scene, as binary STL. | |
 | **Run code** | Shown only while the project's code is paused, for example after **Open without running**. Runs it. | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> |
@@ -64,7 +66,7 @@ From left to right:
 | Part | Meaning |
 |---|---|
 | ▸ / ▾ | Expand or collapse a group that has children. |
-| Kind icon | `</>` for a code object, a frame for a plain group, ∪ − ∩ for a boolean group. The icon of a subtract cutter is red. |
+| Kind icon | `</>` for a code object, a hexagon with an S for an OpenSCAD object, a frame for a plain group, ∪ − ∩ for a boolean group. The icon of a subtract cutter is red. |
 | Name | The instance label if it has one, otherwise the definition name. A labelled row also shows the definition name in grey: `Fixture A  Fixture`. |
 | `◆N` | The definition occurs N times in the scene, and all those copies are linked. Shown only when N is more than 1. |
 | Status dot | Evaluation state, see below. |
@@ -184,7 +186,7 @@ The project name, `Nothing selected`, the number of definitions and objects, a s
 
 | Line | Occurrence selected | Library definition selected |
 |---|---|---|
-| Kind | `CODE OBJECT`, `GROUP` or `BOOLEAN SUBTRACT` (union, intersect) | The same, followed by `· DEFINITION` |
+| Kind | `CODE OBJECT`, `OPENSCAD OBJECT` (with an **OpenSCAD** badge), `GROUP` or `BOOLEAN SUBTRACT` (union, intersect) | The same, followed by `· DEFINITION` |
 | Title | The label, or the definition name | The definition name |
 | Below | `instance of Bolt ◆8`. Click the definition name to select the definition, as from the Library. | `definition · 8 occurrences in the scene ◆8`, or `definition · not used in the scene` |
 
@@ -201,7 +203,7 @@ Shown when an occurrence is selected.
 | **Hidden** | Hide or show this instance (<kbd>H</kbd>). |
 | **Transform** | Position (mm), Rotation (°) and Scale (×), each for X, Y and Z, plus **Reset** (position 0, rotation 0, scale 1). See [Transforms](/reference/transforms#numeric-fields). |
 | **Color** | A colour picker, **clear** to go back to the definition colour, and a note: `own color`, `from definition` or `default`. |
-| **Parameters** · *this instance* | Code objects only. One control per parameter, showing the value this instance uses. |
+| **Parameters** · *this instance* | Code and OpenSCAD objects. One control per parameter, showing the value this instance uses. For an OpenSCAD object, the Customizer tabs are headings and the descriptions are tooltips. |
 
 Parameter controls:
 
@@ -227,6 +229,8 @@ When the definition occurs more than once, a purple banner reads `Definition sha
 | **Color** | The definition colour, and **clear** to remove it. |
 | **Operation** | Groups only: `none — plain assembly`, `union (∪)`, `subtract (−) — child 0 minus the rest` or `intersect (∩)`. Below it, a summary such as `2 children · the first visible child is the base, the others cut`, and the group's evaluation status. A plain group says `Assembly — its children are evaluated one by one`. |
 | **Parameter defaults** | Code objects only: the parameter table. One row per parameter, with name, type (`number`, `boolean`, `choice`), default and a ✕ to remove it. A number has a range row (min, max, step). A choice has an options field (comma-separated). **Add parameter** adds a number named `param`. A problem is shown under the table, and the change is not applied. |
+| **Parameter defaults** (OpenSCAD) | For an OpenSCAD object the table is read from the code: one row per parameter with its type, default, description and range, under its Customizer heading. Only the default can be changed, and the new value is written into the code. A note says so. See [Parameters](/guide/openscad#parameters). |
+| **Files** | OpenSCAD objects only: the files the code uses or includes, attached or `missing`, with Replace, Download and Remove buttons (or **Attach…** for a missing one), then **Attach files…** and **Export .scad**. The title counts them: `1 file · 1 missing`. See [Attached files](/guide/openscad#attached-files). |
 | Usage line | For example `4 instance records · 8 in the scene · used by code in 'Bolt sizes'`. |
 | **Delete definition…** | Library selection only: delete the definition and all its instances (<kbd>Del</kbd>). |
 
@@ -234,7 +238,7 @@ The parameter table is open when you select a definition from the Library, and f
 
 ### Code editor
 
-Code objects get a CodeMirror editor under the inspector. Its header shows `CODE` and the definition name, a `Ctrl+Enter` hint and a **Run** button.
+Code objects get a CodeMirror editor under the inspector. Its header shows `CODE` (or `OPENSCAD` for an OpenSCAD object) and the definition name, a `Ctrl+Enter` hint and a **Run** button. An OpenSCAD object's code is highlighted and completed as OpenSCAD.
 
 ![The code editor showing the Plate's code](/shots/code-editor.png)
 
@@ -242,12 +246,13 @@ Code objects get a CodeMirror editor under the inspector. Its header shows `CODE
 - **Run**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> in the editor, applies the edit at once and retries this object if it failed, for example after a timeout.
 - Long lines wrap. Groups have no editor.
 - An error marks its line in the gutter and underlines it. Hover the marker for the message.
+- An OpenSCAD object has an **Output** panel under the status line, like OpenSCAD's console: its `ECHO`, `WARNING`, `ERROR` and `TRACE` lines, each with a `line N` link that puts the cursor on that line. See [The Output panel](/guide/openscad#the-output-panel).
 
 The **status line** under the editor shows the state of the selected object:
 
 | Status line | Meaning |
 |---|---|
-| `✓ 18 ms · 4,382 triangles` | Evaluated, in that time, with that many triangles. Warnings follow as `· ⚠ Returned nothing`. |
+| `✓ 18 ms · 4,382 triangles` | Evaluated, in that time, with that many triangles. Warnings follow as `· ⚠ Returned nothing`. An OpenSCAD object with more than one warning shows `· ⚠ 3 warnings — see Output`. |
 | `✕ boom (line 2:7)` | This code failed, at line 2, column 7. |
 | `✕ depends on "Bolt" (failed): …` | Code it calls with `part()` failed. The rest of the line is Bolt's own message, and the line number counts in Bolt's code. Fix that definition. |
 | `Evaluating…` | Queued or running. |
@@ -318,6 +323,9 @@ Toasts are short messages at the bottom right of the view. Information stays 3.5
 | `Removed 3 unused definitions`, `Nothing to purge` | The result of **Purge**. |
 | `Opened '…' without running its code — click Run code when you trust it` (warning) | See [Files](/reference/files). |
 | `3Dica is also open in another tab. …` (warning) | Two tabs share one autosave slot. Close one of them. |
+| `'lid' needs 'lib/sizes.scad' — attach it in the Inspector` (warning) | An imported file uses or includes a file you did not choose. See [Import](/guide/openscad#what-import-does). |
+| `Only .scad files can be imported — skipped 'part.stl'` (warning) | Import takes `.scad` files only. |
+| `Exported bracket.scad` | **Export .scad** downloaded an OpenSCAD object's code. |
 
 ## Dialogs
 

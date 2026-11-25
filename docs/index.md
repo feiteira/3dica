@@ -6,7 +6,7 @@ titleTemplate: Code-CAD with linked components
 hero:
   name: 3Dica
   text: Code-CAD with linked components
-  tagline: Write each part in plain JSCAD JavaScript, place it in a tree as live linked copies, then click, isolate and move things in a 3D view. Free, open source, and it runs in your browser.
+  tagline: Write each part in JSCAD JavaScript or OpenSCAD, place it in a tree as live linked copies, then click, isolate and move things in a 3D view. Free, open source, and it runs in your browser.
   image:
     src: /shots/overview.png
     alt: The 3Dica workbench with the sample project open
@@ -45,6 +45,10 @@ features:
     details: "A code object is a function body that uses @jscad/modeling: cuboid, cylinder, subtract, extrudeLinear and the rest. Call part('Bolt', { length: 20 }) to reuse another object, like an OpenSCAD module."
     link: /reference/code-api
     linkText: Code API
+  - title: OpenSCAD code, kept as OpenSCAD
+    details: Import .scad files, or start a blank OpenSCAD object. A built-in interpreter runs them, following OpenSCAD 2021.01. Top-level variables become parameters, Customizer comments become sliders and drop-downs, and echo() lines show in an Output panel.
+    link: /guide/openscad
+    linkText: OpenSCAD objects
   - title: Runs in your browser, builds with AI
     details: There's nothing to install and no account, and the project autosaves in your browser. Ask the Chat tab (Ctrl+L) for a part or a change, with your own key for Anthropic, OpenAI, OpenRouter and others, or a local model. Every AI change is one undo step. Locally, your own assistant can drive 3Dica over MCP.
     link: /guide/ai-chat
@@ -77,4 +81,4 @@ return out
 Everything else is the [JSCAD](https://github.com/jscad/OpenJSCAD.org) modeling library, with its functions
 (`translate`, `cuboid`, `union` and about 90 more) in scope by their plain names.
 
-New here? Read the [Introduction](/guide/introduction), then build [your first part](/tutorials/first-part). Coming from OpenSCAD? See [Coming from OpenSCAD](/guide/coming-from-openscad).
+New here? Read the [Introduction](/guide/introduction), then build [your first part](/tutorials/first-part). Coming from OpenSCAD? [Import your .scad files](/guide/openscad) as they are, or see [Coming from OpenSCAD](/guide/coming-from-openscad).

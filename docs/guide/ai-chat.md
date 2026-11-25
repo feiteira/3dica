@@ -156,6 +156,24 @@ Every editing tool waits for the evaluation and reports sizes and errors, so the
 works. The loop it follows (change one thing, read the result, look, fix) is described in
 [How the assistant works](/guide/mcp#how-the-assistant-works).
 
+### OpenSCAD objects
+
+The assistant can write [OpenSCAD objects](/guide/openscad) as well as JavaScript ones: `create_object` takes
+`language: "openscad"`, and the assistant knows how 3Dica runs OpenSCAD code. Ask for it by name, for example
+*Make an OpenSCAD object for a 40 mm hex standoff with an M3 hole, with the sizes as Customizer parameters*. It can
+also read and edit the OpenSCAD objects you imported:
+
+- `get_definition` tells it the language, the attached files and the files that are missing;
+- its tool results include the object's `echo()` lines and warnings as `output`, so `echo()` is a way for it to
+  check values;
+- it changes an OpenSCAD object's parameters by editing the code, and can change defaults, which are written into the
+  code;
+- for a drop-down parameter it can give the item's value or its label: `holes = 3` and `holes = "3"` are the same
+  override.
+
+It can't attach files to an object or import `.scad` files: do that yourself with **Import** or the Inspector's
+**Files** list.
+
 ### Every change is one undo step
 
 Each change the assistant makes is one ordinary step in the undo history, labelled `AI: …`, for example
@@ -190,6 +208,8 @@ anything else on your computer, and it can't open files.
   messages above.*
 - It can't browse the web or install anything.
 - It works on one project, the one open in this tab.
+- It can't attach files to an OpenSCAD object, or see an attached file's text: `get_definition` lists only their
+  paths and sizes.
 
 You can keep working while it runs, but you and the assistant may then change the same thing. It is easier to wait,
 or to press **Stop** first.

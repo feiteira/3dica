@@ -2,7 +2,7 @@
 // overrides ● ↺, stale overrides), shared-definition banner, Definition section (name, color, op selector | parameter
 // table) and the CodeMirror editor with its status line. The form is REBUILT when the selection (or the def's
 // parameter structure) changes and PATCHED otherwise, so a focused input keeps focus.
-import type { AppContext, EvalError, MountPanel, RenderState } from '../app/context'
+import type { AppContext, ConsoleLine, EvalError, MountPanel, RenderState } from '../app/context'
 import type { Definition, GroupOp, Id, Instance, InstancePath, Transform } from '../core/types'
 import { instanceAtPath, instancesOf, ISOLATE_INSTANCE_ID, pathKey, referrers, resolvePath } from '../core/graph'
 import { staleOverrideKeys } from '../core/params'
@@ -13,6 +13,8 @@ import { fmtInt, fmtNum, h, plural, setAttrIfChanged, setChildren, setText } fro
 import { defIconName, icon } from './icons'
 import { onCommit, overrideControls, paramTable, type Bind } from './param-editor'
 import { CodeEditor, type CodeStatus } from './code-editor'
+import { isScad, scadParamInfo } from '../core/scad'
+import { scadFilesSection, scadParamTable } from './scad-panel'
 
 type View =
   | { kind: 'none' }
@@ -38,7 +40,7 @@ function describe(rs: RenderState): View {
 function signature(v: View): string {
   if (v.kind === 'none') return 'none'
   const d = v.def
-  const struct = d.kind === 'code' ? JSON.stringify(d.params) : 'group'
+  const struct = d.kind === 'code' ? JSON.stringify([d.params, d.lang ?? 'jscad']) : 'group'
   if (v.kind === 'def') return JSON.stringify(['def', d.id, d.kind, struct])
   return JSON.stringify(['occ', v.key, v.inst.id, d.id, d.kind, struct, staleOverrideKeys(d, v.inst.params)])
 }
@@ -49,8 +51,13 @@ function errText(e: EvalError, defId: Id): string {
   return `✕ ${e.message}${where}`
 }
 
-/** The status line for the selection (§4.10): "✓ 18 ms · 4,382 triangles", the error, or what is going on. */
-function statusFor(ctx: AppContext, rs: RenderState, v: View): CodeStatus {
+/**
+ * The status line for the selection (§4.10): "✓ 18 ms · 4,382 triangles", the error, or what is going on — plus,
+ * for an OpenSCAD object, the console lines of the result shown (the Output panel).
+ */
+type StatusOut = CodeStatus & { console?: ConsoleLine[] }
+
+function statusFor(ctx: AppContext, rs: RenderState, v: View): StatusOut {
   if (v.kind === 'none') return { kind: 'idle', text: '' }
   if (rs.ui.evalPaused) return { kind: 'paused', text: 'Code is paused — click Run code to evaluate this project' }
   const def = v.def
@@ -64,13 +71,28 @@ function statusFor(ctx: AppContext, rs: RenderState, v: View): CodeStatus {
   const st = rs.defStates.get(def.id)
   const r = key ? ctx.client.get(key) : undefined
   // a key shared with an identical def carries that def's id: its own-code failure is this def's own failure too
-  if (r?.state === 'failed') return { kind: 'error', text: errText(r.error.trace.length <= 1 ? errorForDef(r.error, def.id, def.name) : r.error, def.id) }
-  if (st?.status === 'error' && st.error && r?.state !== 'ready') return { kind: 'error', text: errText(st.error, def.id) }
+  if (r?.state === 'failed') {
+    const err = r.error.trace.length <= 1 ? errorForDef(r.error, def.id, def.name) : r.error
+    const out: StatusOut = { kind: 'error', text: errText(err, def.id) }
+    if (isScad(def)) out.console = err.def === def.id && r.error.console ? r.error.console : [{ level: 'error', text: errText(err, def.id).replace(/^✕ /, '') }]
+    return out
+  }
+  if (st?.status === 'error' && st.error && r?.state !== 'ready') {
+    const out: StatusOut = { kind: 'error', text: errText(st.error, def.id) }
+    if (isScad(def)) {
+      const own = st.error.def === def.id && st.error.console
+      out.console = own || [{ level: 'error', text: errText(st.error, def.id).replace(/^✕ /, ''), ...(st.error.line && st.error.def === def.id ? { line: st.error.line, col: st.error.col } : {}) }]
+    }
+    return out
+  }
   if (r?.state === 'ready') {
     const e = r.entry
     let text = `✓ ${Math.round(e.ms)} ms · ${fmtInt(e.tris)} triangles`
-    if (e.warnings.length) text += ` · ⚠ ${e.warnings.join('; ')}`
-    return { kind: e.warnings.length ? 'warn' : 'ok', text }
+    // an OpenSCAD object lists its warnings in the Output panel; the status line only counts them
+    if (e.warnings.length) text += isScad(def) && e.warnings.length > 1 ? ` · ⚠ ${e.warnings.length} warnings — see Output` : ` · ⚠ ${e.warnings.join('; ')}`
+    const out: StatusOut = { kind: e.warnings.length ? 'warn' : 'ok', text }
+    if (isScad(def)) out.console = e.console ?? []
+    return out
   }
   if (key) return { kind: 'pending', text: 'Evaluating…' }
   if (v.kind === 'occ' && rs.byKey.get(v.key)?.hidden) return { kind: 'idle', text: 'Hidden — not evaluated' }
@@ -122,7 +144,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
 
   const header = (v: Exclude<View, { kind: 'none' }>): HTMLElement => {
     const def = v.def
-    const kindLabel = def.kind === 'code' ? 'Code object' : def.op === 'none' ? 'Group' : `Boolean ${def.op}`
+    const kindLabel = def.kind === 'code' ? (isScad(def) ? 'OpenSCAD object' : 'Code object') : def.op === 'none' ? 'Group' : `Boolean ${def.op}`
     const title = h('h2', { class: 'insp-title', 'data-testid': 'inspector-title' })
     const sub = h('div', { class: 'insp-sub' })
     binds.push((rs) => {
@@ -144,8 +166,9 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
         }
       }
     })
+    const badge = isScad(def) ? h('span', { class: 'lang-badge', 'data-testid': 'scad-badge', title: 'Its code is OpenSCAD, run by 3Dica\'s built-in interpreter' }, 'OpenSCAD') : null
     return h('div', { class: 'insp-head' },
-      h('div', { class: 'insp-kind' }, icon(defIconName(def)), h('span', null, kindLabel + (v.kind === 'def' ? ' · definition' : ''))),
+      h('div', { class: 'insp-kind' }, icon(defIconName(def)), h('span', null, kindLabel + (v.kind === 'def' ? ' · definition' : '')), badge),
       title, sub)
   }
 
@@ -242,7 +265,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
     ]
     if (def.kind === 'code') {
       parts.push(h('div', { class: 'sec-title' }, h('span', null, 'Parameters'), h('span', { class: 'muted small' }, 'this instance')))
-      parts.push(overrideControls(ctx, path, def, binds))
+      parts.push(overrideControls(ctx, path, def, binds, isScad(def) ? scadParamInfo(def.code) : undefined))
     }
     return h('section', { class: 'insp-sec occ-sec' }, ...parts)
   }
@@ -312,7 +335,7 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
     })
 
     const parts: (HTMLElement | null)[] = [
-      h('div', { class: 'sec-title' }, h('span', null, 'Definition'), h('span', { class: 'muted small' }, def.kind === 'code' ? 'code' : 'group')),
+      h('div', { class: 'sec-title' }, h('span', null, 'Definition'), h('span', { class: 'muted small' }, def.kind === 'code' ? (isScad(def) ? 'OpenSCAD code' : 'code') : 'group')),
       h('div', { class: 'field' }, h('label', null, 'Name'), h('div', { class: 'grow' }, nameIn, nameErr)),
       h('div', { class: 'field' }, h('label', null, 'Color'), h('div', { class: 'color-row' }, color, clear)),
     ]
@@ -335,11 +358,13 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
       parts.push(h('div', { class: 'field' }, h('label', null, 'Operation'), opSel), h('div', { class: 'field' }, h('label', null, ''), kids), st)
     } else {
       const which = v.kind === 'def' ? 'def' : 'occ'
-      const details = h('details', { class: 'pt-details', open: ptableOpen[which] },
-        h('summary', null, h('span', null, 'Parameter defaults'), h('span', { class: 'muted small' }, ` ${plural(def.params.length, 'parameter')}`)),
-        paramTable(ctx, def, focusLater))
+      const scad = isScad(def)
+      const details = h('details', { class: 'pt-details', open: ptableOpen[which], 'data-testid': 'param-defaults' },
+        h('summary', null, h('span', null, 'Parameter defaults'), h('span', { class: 'muted small' }, ` ${plural(def.params.length, 'parameter')}${scad ? ' · from the code' : ''}`)),
+        scad ? scadParamTable(ctx, def, focusLater) : paramTable(ctx, def, focusLater))
       details.addEventListener('toggle', () => { ptableOpen[which] = details.open })
       parts.push(details)
+      if (scad) parts.push(scadFilesSection(ctx, defId, binds))
     }
     parts.push(usage)
     if (v.kind === 'def') {
@@ -413,7 +438,8 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
     for (const b of binds) b(rs)
     const codeDef = v.kind !== 'none' && v.def.kind === 'code' ? v.def.id : null
     el.classList.toggle('no-code', !codeDef)
-    editor.update(rs, codeDef, codeDef ? statusFor(ctx, rs, v) : null)
+    const st = codeDef ? statusFor(ctx, rs, v) : null
+    editor.update(rs, codeDef, st, st?.console ?? null)
   }
 
   ctx.on('render', render)

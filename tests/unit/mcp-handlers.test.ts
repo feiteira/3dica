@@ -68,7 +68,7 @@ function setup() {
   } as unknown as ViewportApi
   const ctx: AppContext = {
     store, client, viewport, commands: {} as Commands, controller: null as never, clipboard: new Clipboard(),
-    files: { downloadBlob() {}, pickFile: async () => null, onWindowDrop: () => () => {} },
+    files: { downloadBlob() {}, pickFile: async () => null, pickFiles: async () => [], onWindowDrop: () => () => {} },
     toast: (m) => { toasts.push(m) }, confirm: async () => true, problems() {},
     on: events.on, emit: (t, p) => { emitted.push(t); events.emit(t, p) }, params: readUrlParams('?fresh'),
   }
@@ -336,5 +336,57 @@ describe('mcp handlers: helpers', () => {
     expect(applyDefaults(params, { width: 40, round: true }, 'Cube').map((p) => p.default)).toEqual([40, true])
     expect(params[0].default).toBe(10)
     expect(() => applyDefaults(params, { round: 3 }, 'Cube')).toThrow(/default must be true or false/)
+  })
+})
+
+describe('mcp handlers: OpenSCAD objects', () => {
+  it('create_object with language openscad makes an OpenSCAD object whose params come from its code', async () => {
+    const { call, defNamed, past } = setup()
+    const r = await call('create_object', { kind: 'code', language: 'openscad', name: 'Peg', code: 'h = 10; // [1:50]\ncylinder(r = 2, h = h);\n', defaults: { h: 25 } })
+    expect(past()).toEqual(['MCP: Add Peg'])
+    const d = defNamed('Peg')
+    expect(d).toMatchObject({ kind: 'code', lang: 'openscad', code: 'h = 25; // [1:50]\ncylinder(r = 2, h = h);\n' })
+    expect(d.kind === 'code' && d.params).toEqual([{ name: 'h', type: 'number', default: 25, min: 1, max: 50 }])
+    expect(r.objects[0]).toMatchObject({ definition: 'Peg', language: 'openscad', status: 'ok' })
+    const g = await call('get_definition', { name: 'Peg' })
+    expect(g).toMatchObject({ language: 'openscad', files: [], code: 'h = 25; // [1:50]\ncylinder(r = 2, h = h);\n' })
+    expect((await call('get_definition', { name: 'Bolt' })).language).toBe('jscad')
+    // the blank OpenSCAD template when no code is given
+    const t = await call('create_object', { kind: 'code', language: 'openscad' })
+    expect(defNamed(t.definition)).toMatchObject({ lang: 'openscad' })
+  })
+
+  it('refuses parameter lists for OpenSCAD objects and language on other kinds', async () => {
+    const { call, past } = setup()
+    await expect(call('create_object', { kind: 'code', language: 'openscad', params: [{ name: 'w', type: 'number', default: 1 }] })).rejects.toThrow(/is an OpenSCAD object: an OpenSCAD object's parameters come from the top-level assignments/)
+    await expect(call('create_object', { kind: 'cube', language: 'openscad' })).rejects.toThrow(/language is only for kind "code"/)
+    await expect(call('create_object', { kind: 'code', language: 'openscad', defaults: { nope: 1 } })).rejects.toThrow(/has no parameter 'nope'/)
+    expect(past()).toEqual([])
+  })
+
+  it('update_definition: code re-derives the params, defaults rewrite the code, params are refused with a hint', async () => {
+    const { call, defNamed, past, emitted } = setup()
+    await call('create_object', { kind: 'code', language: 'openscad', name: 'Box', code: 'w = 10;\ncube(w);\n' })
+    await call('update_definition', { name: 'Box', code: 'w = 10;\nh = 2;\ncube([w, w, h]);\n' })
+    expect(defNamed('Box').kind === 'code' && (defNamed('Box') as any).params.map((p: any) => p.name)).toEqual(['w', 'h'])
+    await call('update_definition', { name: 'Box', defaults: { h: 7 } })
+    expect((defNamed('Box') as any).code).toBe('w = 10;\nh = 7;\ncube([w, w, h]);\n')
+    expect(emitted).toContain('codeChanged')
+    await expect(call('update_definition', { name: 'Box', params: [] })).rejects.toThrow(/Pass the new code with update_definition/)
+    expect(past()).toEqual(['MCP: Add Box', 'MCP: Edit Box', 'MCP: Edit Box'])
+  })
+
+  it('reports the echo / warning output of an OpenSCAD object', async () => {
+    const { call, client } = setup()
+    const realGet = client.get.bind(client)
+    client.get = (k: string) => {
+      const r = realGet(k)
+      if (r?.state === 'ready' && client.jobs.get(k)?.spec.name === 'Echo') {
+        return { state: 'ready', entry: { ...r.entry, console: [{ level: 'echo', text: '"w =", 10', line: 2, col: 1 }] } as MeshEntry }
+      }
+      return r
+    }
+    const r = await call('create_object', { kind: 'code', language: 'openscad', name: 'Echo', code: 'w = 10;\necho("w =", w);\ncube(w);\n' })
+    expect(r.objects[0].output).toEqual(['ECHO: "w =", 10 (line 2)'])
   })
 })

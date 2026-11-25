@@ -2,7 +2,7 @@
 // and the viewport all call these. Every project edit is ONE store.update (one undo step); OpErrors become error
 // toasts through store.onError. Selection / view changes go through store.setUi and never enter history.
 import type { AppContext, Commands, DragPayload, DropTarget, RenameTarget, RenderState, ViewPreset } from './context'
-import type { GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform, UiState } from '../core/types'
+import type { CodeDef, GroupDef, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform, UiState } from '../core/types'
 import { IDENTITY_XF } from '../core/types'
 import * as ops from '../core/ops'
 import { checkDefName, linkedOffset } from '../core/ops'
@@ -10,14 +10,16 @@ import {
   defAtPath, instanceAtPath, instancesOf, isPrefix, linkedChangeMessage, occurrenceCount, pathKey, referrers, resolvePath, samePath,
   wouldCycle,
 } from '../core/graph'
-import { createTemplateDef, placementFor, TEMPLATES, type TemplateKind } from '../core/templates'
+import { createTemplateDef, PALETTE, placementFor, TEMPLATES, type TemplateKind } from '../core/templates'
 import { breadcrumbPatch, enterPatch, escapePatch, librarySelectPatch, pickPatch, treeSelectPatch, type PickMods } from '../core/selection'
 import { emptyProject, hasCode, parseProject, serialize } from '../core/project-io'
 import { sampleProject, SAMPLE_EXPANDED } from '../core/sample'
 import { computeStlItems, stlFileName } from '../core/evalspec'
 import { paramDefProblems } from '../core/params'
 import { cloneXf } from '../core/transform'
-import { newId } from '../core/ids'
+import { newId, uniqueName } from '../core/ids'
+import { checkScadPath, isScad, MAX_SCAD_FILE_CHARS, scadDepList, scadStorePath } from '../core/scad'
+import { planScadImport, scadObjectName, type ImportFile } from '../core/scad-import'
 import { clipFromPath } from '../state/clipboard'
 
 const MODE_VERB: Record<UiState['gizmoMode'], string> = { translate: 'Move', rotate: 'Rotate', scale: 'Scale' }
@@ -31,6 +33,11 @@ function safeFileName(name: string): string {
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
+
+const isScadFile = (f: File) => /\.scad$/i.test(f.name)
+const baseName = (path: string) => path.split('/').pop() ?? path
+/** How long after an import of several files their spacing may still join its undo step (they are laid out once evaluated). */
+const IMPORT_LAYOUT_MS = 120_000
 
 export function createCommands(ctx: AppContext): Commands {
   /** palette counter for new code objects (§3.2 PALETTE[n++ % 8]) */
@@ -103,22 +110,68 @@ export function createCommands(ctx: AppContext): Commands {
   const freshUi = (extra: Partial<UiState> = {}): Partial<UiState> => ({
     selection: { kind: 'none' }, context: [], viewMode: 'context', evalPaused: false, autoIsolatedFrom: undefined, expanded: {}, ...extra,
   })
+  /** Where new objects go (§4.2): the context group (root if none) and the max X of its visible children's boxes. */
+  const placementTarget = (): { targetDef: GroupDef; basePath: InstancePath; maxX: number | null } | null => {
+    const project = P()
+    const ctxPath = U().context
+    const target = defAtPath(project, ctxPath)
+    const targetDef = target && target.kind === 'group' ? target : project.defs[project.root]
+    if (targetDef.kind !== 'group') return null
+    const basePath = targetDef.id === project.root ? [] : ctxPath
+    let maxX: number | null = null
+    for (const c of targetDef.children) {
+      if (c.hidden) continue
+      const b = box([...basePath, c.id])
+      if (b && Number.isFinite(b.max[0])) maxX = maxX === null ? b.max[0] : Math.max(maxX, b.max[0])
+    }
+    return { targetDef, basePath, maxX }
+  }
+  /** Read picked / dropped files as UTF-8 text, with \n line ends (the editor's; a Windows file's \r\n would make it
+   *  reload on every render); files over the size limit are skipped with a toast. */
+  const readFiles = async (files: File[]): Promise<ImportFile[]> => {
+    const out: ImportFile[] = []
+    for (const f of files) {
+      if (f.size > MAX_SCAD_FILE_CHARS) { ctx.toast(`'${f.name}' is larger than ${MAX_SCAD_FILE_CHARS / 1024 / 1024} MB — skipped`, 'error'); continue }
+      try { out.push({ name: f.name, text: (await f.text()).replace(/\r\n?/g, '\n') }) } catch (e) { ctx.toast(`Can't read '${f.name}': ${errorText(e)}`, 'error') }
+    }
+    return out
+  }
+  /**
+   * Several imported objects are first placed at the same spot (their sizes are unknown); once evaluated they are put
+   * side by side, 5 mm apart, in the same undo step. Skipped when anything else happened meanwhile.
+   */
+  const layoutImport = (label: string, coalesce: string, parentId: Id, paths: InstancePath[]) => {
+    void ctx.controller.idle().then(() => {
+      const h = ctx.store.history.labels()
+      if (h.past[h.past.length - 1] !== label || h.future.length) return
+      const parent = P().defs[parentId]
+      if (!parent || parent.kind !== 'group') return
+      const moves: { id: Id; xf: Transform }[] = []
+      let cursor: number | null = null
+      for (const path of paths) {
+        const inst = instanceAtPath(P(), path)
+        const b = box(path)
+        if (!inst || !b || !Number.isFinite(b.min[0])) continue
+        if (cursor === null) { cursor = b.max[0] + 5; continue }
+        const dx = Math.ceil(cursor - b.min[0])
+        const xf = cloneXf(inst.xf)
+        xf.t[0] += dx
+        moves.push({ id: inst.id, xf })
+        cursor = b.max[0] + dx + 5
+      }
+      if (!moves.length) return
+      ctx.store.update(label, (d) => { for (const m of moves) ops.setTransform(d, m.id, m.xf) }, { coalesce, window: IMPORT_LAYOUT_MS })
+      frameWhenReady(paths[paths.length - 1])
+    }).catch(() => {})
+  }
 
   const commands: Commands = {
     // ───────────────────────────── create / structure (§4.2) ─────────────────────────────
     addTemplate(kind: TemplateKind) {
       const project = P()
-      const ctxPath = U().context
-      const target = defAtPath(project, ctxPath)
-      const targetDef = target && target.kind === 'group' ? target : project.defs[project.root]
-      const basePath = targetDef.id === project.root ? [] : ctxPath
-      if (targetDef.kind !== 'group') return
-      let maxX: number | null = null
-      for (const c of targetDef.children) {
-        if (c.hidden) continue
-        const b = box([...basePath, c.id])
-        if (b && Number.isFinite(b.max[0])) maxX = maxX === null ? b.max[0] : Math.max(maxX, b.max[0])
-      }
+      const where = placementTarget()
+      if (!where) return
+      const { targetDef, basePath, maxX } = where
       const def = createTemplateDef(kind, project, colorIndex)
       if (kind !== 'group') colorIndex++
       const inst: Instance = { id: newId('i'), def: def.id, xf: { t: placementFor(kind, maxX), r: [0, 0, 0], s: [1, 1, 1] } }
@@ -483,6 +536,103 @@ export function createCommands(ctx: AppContext): Commands {
     setGroupOp(defId: Id, op: GroupOp) {
       const r = ctx.store.update(`Set op ${op}`, (d) => ops.setGroupOp(d, defId, op))
       if (r.ok && r.changed) linkedToast(defId)
+    },
+
+    // ───────────────────────────── OpenSCAD objects ─────────────────────────────
+    async importScad(list?: File[]) {
+      const picked = list ?? await ctx.files.pickFiles('.scad')
+      if (!picked.length) return
+      const other = picked.filter((f) => !isScadFile(f))
+      if (other.length) ctx.toast(`Only .scad files can be imported — skipped ${other.map((f) => `'${f.name}'`).join(', ')}`, 'warn')
+      const plan = planScadImport(await readFiles(picked.filter(isScadFile)))
+      if (!plan.length) return
+      ctx.emit('flushCode', undefined)
+      const where = placementTarget()
+      if (!where) return
+      const { targetDef, basePath, maxX } = where
+      const taken = new Set(Object.values(P().defs).map((d) => d.name))
+      const made = plan.map((o) => {
+        const name = uniqueName(scadObjectName(o.file), taken)
+        taken.add(name)
+        const def: CodeDef = { id: newId('d'), name, kind: 'code', lang: 'openscad', code: o.code, params: [], color: PALETTE[colorIndex++ % PALETTE.length] }
+        if (Object.keys(o.files).length) def.files = o.files
+        const inst: Instance = { id: newId('i'), def: def.id, xf: { t: placementFor('openscad', maxX), r: [0, 0, 0], s: [1, 1, 1] } }
+        return { def, inst, missing: o.missing }
+      })
+      const label = made.length === 1 ? `Import ${plan[0].file}` : `Import ${made.length} files`
+      const coalesce = `import:${made[0].inst.id}`
+      const r = ctx.store.update(label, (d) => {
+        for (const m of made) { ops.addDef(d, m.def); ops.addInstance(d, targetDef.id, -1, m.inst) }
+        return made.map((m) => [...basePath, m.inst.id])
+      }, made.length > 1 ? { coalesce, window: IMPORT_LAYOUT_MS } : {})
+      if (!r.ok) return
+      linkedToast(targetDef.id, 'Added to')
+      const last = r.value[r.value.length - 1]
+      selectNew(last)
+      for (const m of made) {
+        if (!m.missing.length) continue
+        const list = m.missing.map((n) => `'${n}'`).join(', ')
+        ctx.toast(`'${m.def.name}' needs ${list} — attach ${m.missing.length === 1 ? 'it' : 'them'} in the Inspector`, 'warn')
+      }
+      if (made.length > 1) layoutImport(label, coalesce, targetDef.id, r.value)
+      frameWhenReady(last)
+    },
+
+    async dropFiles(files: File[]) {
+      if (!files.length) return
+      if (files.some(isScadFile)) await commands.importScad(files)
+      else await commands.open(files[0])
+    },
+
+    setScadParamDefault(defId: Id, name: string, value: ParamValue): string | null {
+      ctx.emit('flushCode', undefined) // a half-typed edit first: the rewrite works on the text the user sees
+      const r = ctx.store.update(`Change ${name}`, (d) => ops.setScadParamDefault(d, defId, name, value),
+        { coalesce: `scad-default:${defId}:${name}`, window: 500 })
+      if (!r.ok) return r.error
+      if (r.changed) ctx.emit('codeChanged', { defIds: [defId] })
+      return null
+    },
+
+    async attachScadFiles(defId: Id, path?: string, files?: File[]) {
+      const def0 = P().defs[defId]
+      if (!isScad(def0)) return
+      const picked = files ?? await ctx.files.pickFiles(path && !/\.scad$/i.test(path) ? '' : '.scad')
+      const read = await readFiles(path ? picked.slice(0, 1) : picked)
+      if (!read.length) return
+      const def = P().defs[defId]
+      if (!isScad(def)) return
+      // a file without a given path fills the missing use / include of that name, else keeps its own name
+      const missing = scadDepList(def.code, def.files).filter((x) => x.resolved === null)
+      const items = read.map((f) => {
+        if (path) return { path, text: f.text }
+        const need = missing.find((m) => baseName(m.name.replace(/\\/g, '/')) === f.name)
+        const stored = need ? scadStorePath(need.from, need.name) : null
+        const own = checkScadPath(f.name)
+        return { path: stored ?? ('path' in own ? own.path : f.name), text: f.text }
+      })
+      ctx.emit('flushCode', undefined)
+      const replacing = items.length === 1 && !!def.files && Object.hasOwn(def.files, items[0].path)
+      const label = items.length === 1 ? `${replacing ? 'Replace' : 'Attach'} ${baseName(items[0].path)}` : `Attach ${items.length} files`
+      ctx.store.update(label, (d) => { for (const it of items) ops.attachScadFile(d, defId, it.path, it.text) })
+    },
+
+    removeScadFile(defId: Id, path: string) {
+      ctx.store.update(`Remove ${baseName(path)}`, (d) => ops.removeScadFile(d, defId, path))
+    },
+
+    downloadScadFile(defId: Id, path: string) {
+      const def = P().defs[defId]
+      if (!isScad(def) || !def.files || !Object.hasOwn(def.files, path)) return
+      ctx.files.downloadBlob(new Blob([def.files[path]], { type: 'text/plain' }), safeFileName(baseName(path)))
+    },
+
+    exportScad(defId: Id) {
+      ctx.emit('flushCode', undefined)
+      const def = P().defs[defId]
+      if (!isScad(def)) return
+      const filename = `${safeFileName(def.name)}.scad`
+      ctx.files.downloadBlob(new Blob([def.code], { type: 'text/plain' }), filename)
+      ctx.toast(`Exported ${filename}`)
     },
 
     // ───────────────────────────── tree drag and drop (§4.8) ─────────────────────────────

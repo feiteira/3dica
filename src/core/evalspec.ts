@@ -5,11 +5,15 @@ import type { EvalError } from '../eval/protocol'
 import { hash } from './hash'
 import { resolveParamDefs, resolveParams } from './params'
 import { toMatrix } from './transform'
-import { indexOccurrences, isPrefix, nameIndex, staticRefSites, staticRefs, type Occurrence } from './graph'
+import { defRefSites, defRefs, indexOccurrences, isPrefix, nameIndex, type Occurrence } from './graph'
 
-export const ENGINE = 'jscad-2.13.0/e1'
+export const ENGINE = 'jscad-2.13.0/e2'
 
-export interface CodeSpec  { kind: 'code';  defKey: string; def: Id; name: string; code: string; paramDefs: ParamDef[]; deps: Record<string /*literal name*/, DefSpec> }
+export interface CodeSpec  {
+  kind: 'code';  defKey: string; def: Id; name: string; code: string; paramDefs: ParamDef[]; deps: Record<string /*literal name*/, DefSpec>
+  /** OpenSCAD code (absent = JSCAD) and the files its use / include name */
+  lang?: 'openscad'; files?: Record<string, string>
+}
 export interface GroupSpec { kind: 'group'; defKey: string; def: Id; name: string; op: GroupOp; children: ChildSpec[] }  // visible children only
 export interface ChildSpec { spec: DefSpec; params: Record<string, ParamValue>; matrix: Mat4 }
 export type DefSpec = CodeSpec | GroupSpec
@@ -63,11 +67,25 @@ function paramKeyPart(p: ParamDef): unknown[] {
 /**
  * Build the DefSpec of every non-root def (the root is built lazily on request), memoized per def id within this
  * build so a DAG is expanded once. Keys (§5.2):
- *   CodeSpec  defKey = hash(['code', ENGINE, code, paramDefs.map(p => [p.name, p.type, p.default(, p.options)]), sortedDeps.map(([n, s]) => [n, s.defKey])])
+ *   CodeSpec  defKey = hash(['code', ENGINE, code, paramDefs.map(p => [p.name, p.type, p.default(, p.options)]), sortedDeps.map(([n, s]) => [n, s.defKey])
+ *                            (, 'openscad', hash(sortedFiles.map(([path, text]) => [path, text])) for OpenSCAD code)])
  *   GroupSpec defKey = hash(['group', ENGINE, op, children.map(c => [c.spec.defKey, c.params, c.matrix])])
  *   resultKey = hash([defKey, resolvedParams])
  * Names and colors are never part of a key.
  */
+const NO_FILES: Record<string, string> = Object.freeze({})
+/** The hash of an attached-files map, once per map object: the store keeps an unchanged map the same object across
+ *  snapshots, so an unrelated change does not hash up to 16 MB of library text again. */
+const filesKeys = new WeakMap<Record<string, string>, string>()
+function filesKey(files: Record<string, string>): string {
+  let k = filesKeys.get(files)
+  if (k === undefined) {
+    k = hash(Object.keys(files).sort().map((p) => [p, files[p]]))
+    filesKeys.set(files, k)
+  }
+  return k
+}
+
 export function buildSpecs(project: Project): SpecSet {
   const memo = new Map<Id, DefSpec>()
   const errors = new Map<Id, EvalError>()
@@ -95,7 +113,7 @@ export function buildSpecs(project: Project): SpecSet {
         const md = project.defs[m]
         const e: EvalError = { kind: 'cycle', def: m, defName: nameOf(m), message: err.message, trace: cycleNames }
         if (md?.kind === 'code') {
-          const site = staticRefSites(md.code).find((s) => s.name === nameOf(cycle[i + 1]))
+          const site = defRefSites(md).find((s) => s.name === nameOf(cycle[i + 1]))
           if (site) { e.line = site.line; e.col = site.col }
         }
         record(m, e)
@@ -130,8 +148,8 @@ export function buildSpecs(project: Project): SpecSet {
 
   const buildCode = (def: Definition & { kind: 'code' }): CodeSpec => {
     const deps: Record<string, DefSpec> = {}
-    const sites = staticRefSites(def.code)
-    for (const ref of staticRefs(def.code)) {
+    const sites = defRefSites(def)
+    for (const ref of defRefs(def)) {
       const target = names.get(ref)
       if (!target) {
         const site = sites.find((s) => s.name === ref)
@@ -143,8 +161,15 @@ export function buildSpecs(project: Project): SpecSet {
       deps[ref] = visit(target.id)
     }
     const sortedDeps = Object.keys(deps).sort().map((n) => [n, deps[n].defKey])
-    const defKey = hash(['code', ENGINE, def.code, def.params.map(paramKeyPart), sortedDeps])
-    return { kind: 'code', defKey, def: def.id, name: def.name, code: def.code, paramDefs: def.params, deps }
+    const key: unknown[] = ['code', ENGINE, def.code, def.params.map(paramKeyPart), sortedDeps]
+    const spec: CodeSpec = { kind: 'code', defKey: '', def: def.id, name: def.name, code: def.code, paramDefs: def.params, deps }
+    if (def.lang === 'openscad') {
+      key.push('openscad', filesKey(def.files ?? NO_FILES))
+      spec.lang = 'openscad'
+      if (def.files) spec.files = def.files
+    }
+    spec.defKey = hash(key)
+    return spec
   }
 
   const buildGroup = (def: Definition & { kind: 'group' }): GroupSpec => {

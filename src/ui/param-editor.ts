@@ -8,6 +8,7 @@ import type { AppContext, RenderState } from '../app/context'
 import type { CodeDef, InstancePath, ParamDef, ParamValue } from '../core/types'
 import { instanceAtPath } from '../core/graph'
 import { resolveParamDefs, staleOverrideKeys } from '../core/params'
+import type { ScadParamInfo } from '../core/scad'
 import { fmtNum, h } from './dom'
 import { icon } from './icons'
 
@@ -37,12 +38,19 @@ export function onCommit(input: HTMLInputElement | HTMLSelectElement, commit: ()
 
 // ───────────────────────────── overrides (occurrence) ─────────────────────────────
 
-export function overrideControls(ctx: AppContext, path: InstancePath, def: CodeDef, binds: Bind[]): HTMLElement {
+/**
+ * `info` (OpenSCAD objects): each parameter's Customizer description (the name's tooltip) and tab (a header row).
+ */
+export function overrideControls(ctx: AppContext, path: InstancePath, def: CodeDef, binds: Bind[], info?: Map<string, ScadParamInfo>): HTMLElement {
   const list = h('div', { class: 'prm-list' })
   const inst0 = instanceAtPath(ctx.store.project, path)
+  let group: string | undefined
 
   for (const pd of def.params) {
     const name = pd.name
+    const pi = info?.get(name)
+    if (pi?.group && pi.group !== group) list.appendChild(h('div', { class: 'scad-group' }, pi.group))
+    group = pi?.group ?? group
     const current = (): { has: boolean; eff: ParamValue; pd: ParamDef } | null => {
       const project = ctx.store.project
       const inst = instanceAtPath(project, path)
@@ -60,7 +68,7 @@ export function overrideControls(ctx: AppContext, path: InstancePath, def: CodeD
     const dot = h('span', { class: 'ovr-dot', title: 'Overridden on this instance' }, '●')
     const reset = h('button', { type: 'button', class: 'icon-btn prm-reset', 'data-testid': `param-reset-${name}`, title: `Reset to the default (${String(pd.default)})`, tabIndex: -1 }, '↺')
     reset.addEventListener('click', () => { ctx.commands.setOverride(path, name, undefined); reset.blur() })
-    const label = h('label', { class: 'prm-name', title: name, for: `prm-${name}` }, h('span', { class: 'prm-name-text' }, name), dot)
+    const label = h('label', { class: 'prm-name', title: pi?.description ? `${pi.description}\n${name}` : name, for: `prm-${name}` }, h('span', { class: 'prm-name-text' }, name), dot)
     let ctl: HTMLElement
     let patch: (v: ParamValue) => void
 
@@ -76,7 +84,10 @@ export function overrideControls(ctx: AppContext, path: InstancePath, def: CodeD
       const commitNum = () => {
         const raw = num.value.trim()
         const v = Number(raw)
-        if (raw !== '' && Number.isFinite(v)) commit(v)
+        // the field shows the value rounded (fmtNum): Enter on an unchanged field must not override with the rounded one
+        const c = current()
+        const unchanged = c !== null && typeof c.eff === 'number' && raw === fmtNum(c.eff)
+        if (!unchanged && raw !== '' && Number.isFinite(v)) commit(v)
         show()
       }
       onCommit(num, commitNum)

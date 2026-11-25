@@ -11,8 +11,9 @@
 ![3Dica with the "Bracket kit" sample: scene tree and library on the left, the 3D view in the middle, the inspector and code editor on the right](docs/public/shots/overview.png)
 
 If you like OpenSCAD or OpenJSCAD but want to point at the thing you are building, 3Dica is for you. Every object is a
-named [JSCAD](https://github.com/jscad/OpenJSCAD.org) definition with its own code and parameters. You place definitions
-in an object tree as **linked instances**: change the definition once and every copy follows. Click any object in the 3D
+named definition with its own code and parameters, written in [JSCAD](https://github.com/jscad/OpenJSCAD.org)
+JavaScript or in OpenSCAD. You place definitions in an object tree as **linked instances**: change the definition once
+and every copy follows. Click any object in the 3D
 view to select it, press <kbd>I</kbd> to isolate it, and move, rotate or scale it with a gizmo. The code stays the source of
 truth for shape, and the tree holds placement. Everything runs in your browser. There is no account and no server.
 
@@ -21,6 +22,11 @@ truth for shape, and the tree holds placement. Everything runs in your browser. 
 - **Code objects.** Each object's code is a JSCAD function body. The functions of the main `@jscad/modeling` namespaces
   (`cuboid`, `cylinder`, `union`, `subtract`, `translate`, `extrudeLinear`, …) are in scope by their plain names, and the
   whole library is available as `jscad`. Parameters have defaults, min/max/step hints and per-instance overrides.
+- **OpenSCAD objects.** Import `.scad` files (or drop them on the window) and they stay OpenSCAD: a built-in
+  interpreter runs them in the browser, following OpenSCAD 2021.01, with no OpenSCAD install. Top-level variables
+  become parameters with the Customizer's sliders and drop-downs, `use` / `include` read files attached to the object,
+  `echo()` shows in an Output panel, and `part("Name", width = 20)` works both ways. `import()`, `surface()` and fonts
+  are not supported (`text()` is approximated).
 - **Linked copies.** <kbd>Ctrl</kbd>+<kbd>D</kbd> adds another instance of the *same* definition. A `◆N` badge and a purple
   tint in the view show what is linked. **Make unique** (<kbd>U</kbd>) breaks the link one level deep.
 - **Groups and booleans.** Groups are assemblies, or `union` / `subtract` / `intersect` operations. When you select a
@@ -35,8 +41,8 @@ truth for shape, and the tree holds placement. Everything runs in your browser. 
 - **Fast and safe evaluation.** Code runs in a Web Worker. Results are cached by content hash, so the 8 bolts of the
   sample share one mesh, and the last good mesh stays on screen while you type. A runaway `while (true)` is stopped
   after 20 s, or about 1 s after you type over it. Geometry that would run the tab out of memory is refused.
-- **Files.** Undo and redo, autosave with 5 backups, `.3dica.json` save and open, and binary STL export. Opening a file
-  that contains code asks before running it.
+- **Files.** Undo and redo, autosave with 5 backups, `.3dica.json` save and open, `.scad` import and export, and
+  binary STL export. Opening a file that contains code asks before running it.
 - **AI chat.** The Chat tab (<kbd>Ctrl</kbd>+<kbd>L</kbd>) builds and changes parts for you and checks its work in
   screenshots. Bring your own key for Anthropic, OpenAI, OpenRouter, Gemini, Groq, Mistral or DeepSeek, or use a local
   model with Ollama or LM Studio. It runs in the browser, and every change it makes is one undo step.
@@ -127,6 +133,7 @@ npm run test:e2e
 ```text
 src/
   core/      pure logic: types, graph expansion, ops, hashing, eval specs, selection rules (unit-tested)
+  openscad/  the OpenSCAD interpreter and geometry builder (contract: types.ts)
   state/     store with undo, clipboard, autosave, other-tab detection
   eval/      worker protocol, engine, worker, client, mesh cache
   view/      three.js viewport, scene sync, materials, picking, gizmo
@@ -168,4 +175,6 @@ issue, see [SECURITY.md](SECURITY.md).
 the [Anthropic](https://github.com/anthropics/anthropic-sdk-typescript) and [OpenAI](https://github.com/openai/openai-node)
 TypeScript SDKs and [Zod](https://zod.dev),
 and it is built and tested with [Vite](https://vite.dev), [Vitest](https://vitest.dev) and
-[Playwright](https://playwright.dev). It owes its ideas to [OpenSCAD](https://openscad.org).
+[Playwright](https://playwright.dev). It owes its ideas to [OpenSCAD](https://openscad.org). Its OpenSCAD interpreter is
+an independent implementation, written from the OpenSCAD User Manual and checked against the OpenSCAD 2021.01 binary;
+it contains no OpenSCAD code.

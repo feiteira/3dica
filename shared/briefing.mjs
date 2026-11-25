@@ -33,6 +33,7 @@ export function flatNames() {
 export const MODEL_NOTES = `Model:
 - Units are millimetres. Z is up. The grid is 200 mm across with 10 mm cells, on the XY plane at Z = 0.
 - A definition is a reusable named thing. A Code definition is a JavaScript function BODY (not a module, no imports) that returns a JSCAD Geom3 or an array of them; params holds its parameters (defaults merged with the instance's overrides). The functions of the main @jscad/modeling namespaces (primitives, booleans, transforms, extrusions, hulls, expansions, colors, measurements, text, utils, curves) are in scope by their plain names (cuboid, cylinder, union, subtract, translate, rotate, extrudeLinear, …); the rest is reached through jscad (jscad.geometries, jscad.maths, jscad.modifiers). part('Name', { param: value }) returns another definition's geometry (string literal name).
+- An OpenSCAD object is a Code definition whose code is OpenSCAD source instead (create_object kind "code", language "openscad"), run by 3Dica's own OpenSCAD interpreter; its parameters are its top-level assignments. See "OpenSCAD objects" in the code API cheat sheet.
 - A Group definition holds child instances and has an op: none (assembly), union, subtract (first child minus the rest) or intersect.
 - An instance places a definition inside a group with a transform { t: [x,y,z] mm, r: [x,y,z] degrees applied like OpenSCAD rotate([x,y,z]) (X, then Y, then Z), s: [x,y,z] factors }, optional label, color and parameter overrides. Copies are LINKED: editing a definition (or a child inside a group definition) changes every copy. make_unique or duplicate mode "unique" breaks the link.
 - Objects are addressed by instance paths (instance ids from the scene root, e.g. ["i_fx1","i_b1"]); get_scene lists them. Definitions are addressed by name.
@@ -82,6 +83,27 @@ ${nsLines}
 
 ## Errors
 Syntax and runtime errors report the line in the code body (line 1 = the first line you wrote). A definition whose part() target fails reports 'depends on "X" (failed)'. The last good mesh stays on screen, tinted red, while the code is broken.
+
+## OpenSCAD objects
+An OpenSCAD object (create_object kind "code", language "openscad") keeps its code as OpenSCAD source; 3Dica's built-in interpreter runs it on the same geometry engine, following OpenSCAD 2021.01 (no OpenSCAD install needed; its code is never run as JavaScript).
+- Write ordinary OpenSCAD: modules, functions, for / if / let, children(), list comprehensions, echo / assert, $fn / $fa / $fs, the primitives, transforms, union / difference / intersection, hull, minkowski, offset, linear_extrude, rotate_extrude, projection, color. Angles are in DEGREES here, cube() starts at the origin unless center = true — OpenSCAD's conventions, not JSCAD's.
+- Parameters, Customizer style: every top-level assignment of a number, true/false, or a string with a dropdown comment (\`shape = "round"; // [round, square]\`) before the first \`{\` is a parameter; plain strings and vectors are not. A comment after it shapes the control: \`width = 40; // [10:100]\` (slider), \`wall = 2; // .5\` (step), \`holes = 2; // [0, 1, 2]\` (dropdown), \`size = 20; // [10:Small, 20:Large]\` (labelled dropdown); a \`//\` line just above is its description, \`/* [Tab] */\` starts a group and \`/* [Hidden] */\` hides what follows. Instance overrides replace the value like \`openscad -D\`; a dropdown override takes the item's value or its label (\`holes: 2\` or \`holes: "2"\`, \`size: 20\` or \`size: "Large"\`). To add, remove or rename parameters, edit the code (params is refused for OpenSCAD objects); defaults rewrite the value in the code.
+- \`part("Name", width = 20);\` places another 3Dica definition (string literal name, number / boolean / string overrides), unless the code defines its own \`module part\`. JSCAD code can part() an OpenSCAD object too.
+- \`use <file>\` / \`include <file>\` read files attached to the object (the user attaches them in the Inspector, or imports several .scad files at once); a missing one is an error naming it. get_definition lists the attached and missing files.
+- A 2D-only result is shown 1 mm thick with a warning; 2D next to 3D at the top level is dropped with a warning. $preview is true. import(), surface() and DXF files are not supported (error). text() uses a built-in single-stroke font fitted to the size and spacing of OpenSCAD's default font (the letter shapes differ; font = is ignored).
+- echo() lines and warnings come back as \`output\` in the tool results. Errors give the line in the object's own code; one inside an attached file starts with its path and line ("lib/gear.scad:12: …").
+- The same geometry limits and timeout apply; recursion deeper than a few hundred calls (200–880, depending on the body) stops with "Recursion too deep" (tail recursion has no limit).
+
+\`\`\`scad
+// Width of the bracket
+width = 40; // [10:100]
+thickness = 3;
+$fn = 32;
+difference() {
+  cube([width, 20, thickness]);
+  translate([width / 2, 10, -1]) cylinder(d = 5, h = thickness + 2);
+}
+\`\`\`
 
 ## Example
 \`\`\`js

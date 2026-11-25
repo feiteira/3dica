@@ -32,7 +32,7 @@
 //   src/ui/shortcuts.ts     export const install: InstallShortcuts
 //   src/ui/dom.ts           export function h(...); export const toast: ToastFn; export const confirmDialog: ConfirmFn;
 //                           export const problemsDialog: ProblemsFn
-//   src/io/files.ts         the FilesApi functions as named exports (downloadBlob, pickFile, onWindowDrop)
+//   src/io/files.ts         the FilesApi functions as named exports (downloadBlob, pickFile, pickFiles, onWindowDrop)
 //   src/main.ts             boot (integrator): Autosave.boot → Store → EvalClient → createViewport → createCommands →
 //                           controller → panels → shortcuts → window.__3dica (TestApi)
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -44,7 +44,7 @@ import type { Occurrence } from '../core/graph'
 import type { DefEvalState, DefStatus, Job, SpecSet, WantedJobs } from '../core/evalspec'
 import type { PickMods } from '../core/selection'
 import type { TemplateKind } from '../core/templates'
-import type { EvalError } from '../eval/protocol'
+import type { ConsoleLine, EvalError } from '../eval/protocol'
 import type { Store } from '../state/store'
 import type { Clipboard } from '../state/clipboard'
 
@@ -53,7 +53,7 @@ export type { Occurrence } from '../core/graph'
 export type { DefEvalState, DefStatus, Job, SpecSet, WantedJobs } from '../core/evalspec'
 export type { PickMods } from '../core/selection'
 export type { TemplateKind } from '../core/templates'
-export type { EvalError } from '../eval/protocol'
+export type { ConsoleLine, EvalError } from '../eval/protocol'
 
 // ─────────────────────────────────────────── eval/ (§5.5) ───────────────────────────────────────────
 
@@ -75,6 +75,8 @@ export interface MeshEntry {
   ms: number
   /** e.g. 'Returned nothing', 'subtract: first child is empty' */
   warnings: string[]
+  /** OpenSCAD objects: the console output (ECHO / WARNING lines) for the Output panel */
+  console?: ConsoleLine[]
 }
 
 export type ResultState =
@@ -400,7 +402,7 @@ export interface DropTarget { parentPath: InstancePath; index: number }
  */
 export interface Commands {
   // ── create / structure (§4.2)
-  /** Add Cube/Sphere/Cylinder/Torus/Code/Group into the context group (root if []): createTemplateDef + addDef +
+  /** Add Cube/Sphere/Cylinder/Torus/Code/OpenSCAD/Group into the context group (root if []): createTemplateDef + addDef +
    *  addInstance at placementFor(kind, maxX) where maxX = max X of union(occurrenceBox(child, 'parent')) over the
    *  context's visible children; toast "Added to 'Fixture' — 2 copies updated" if the target has > 1 occurrence;
    *  select the new occurrence, frameIfNeeded. ('Add Cube') */
@@ -503,6 +505,27 @@ export interface Commands {
   /** Group op selector. ('Set op union') */
   setGroupOp(defId: Id, op: GroupOp): void
 
+  // ── OpenSCAD objects
+  /** Toolbar Import / .scad files dropped on the window (pickFiles when `files` is omitted): every file another one
+   *  does not use / include becomes an OpenSCAD object (the files it names attached), added to the context group like
+   *  addTemplate, in ONE step; the last one is selected and framed. Files over 2 MB or not .scad are skipped with a
+   *  toast. ('Import bracket.scad' / 'Import 3 files') */
+  importScad(files?: File[]): Promise<void>
+  /** Files dropped on the window: .scad files are imported (importScad), anything else opens the first file (open). */
+  dropFiles(files: File[]): Promise<void>
+  /** Inspector default of an OpenSCAD parameter: ops.setScadParamDefault rewrites its literal in the code.
+   *  Returns null or the problem. ('Change width') */
+  setScadParamDefault(defId: Id, name: string, value: ParamValue): string | null
+  /** Attach (or replace) files of an OpenSCAD object: `files` or picked ones. One file goes to `path` (default: the
+   *  missing use / include path with its name, else its own name). ('Attach gear.scad' / 'Attach 2 files') */
+  attachScadFiles(defId: Id, path?: string, files?: File[]): Promise<void>
+  /** ('Remove gear.scad') */
+  removeScadFile(defId: Id, path: string): void
+  /** Download one attached file. */
+  downloadScadFile(defId: Id, path: string): void
+  /** Export .scad: download the object's own code as '<name>.scad'. */
+  exportScad(defId: Id): void
+
   // ── tree drag and drop (§4.8)
   /** dragover validity: false if target.parentPath has payload.path as a prefix, or wouldCycle(project, targetDef, draggedDef). */
   canDrop(payload: DragPayload, target: DropTarget): boolean
@@ -543,8 +566,11 @@ export interface FilesApi {
   downloadBlob(blob: Blob, filename: string): void
   /** hidden <input type=file accept=…>; resolves null when cancelled */
   pickFile(accept: string): Promise<File | null>
-  /** a file dropped anywhere on the window (ignores the tree's application/x-3dica drags); returns unsubscribe */
-  onWindowDrop(cb: (file: File) => void): () => void
+  /** the same, choosing several files at once (Import); resolves [] when cancelled */
+  pickFiles(accept: string): Promise<File[]>
+  /** files dropped anywhere on the window — the first one and all of them (ignores the tree's application/x-3dica
+   *  drags); returns unsubscribe */
+  onWindowDrop(cb: (file: File, all: File[]) => void): () => void
 }
 
 // ─────────────────────────────────────────── app context, events, panels ───────────────────────────────────────────

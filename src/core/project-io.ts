@@ -4,6 +4,7 @@ import { isDefId, isInstanceId, MAX_NAME } from './ids'
 import { findCycle } from './graph'
 import { paramDefProblems } from './params'
 import { normalizeColor } from './ops'
+import { normalizeScadFiles, scadParams } from './scad'
 
 export const APP_ID = '3dica 0.1.0'
 export const CURRENT_VERSION = 1
@@ -55,13 +56,22 @@ function orderedDef(d: Definition): Record<string, unknown> {
   const o: Record<string, unknown> = { id: d.id, name: d.name, kind: d.kind }
   if (d.color !== undefined) o.color = d.color
   if (d.kind === 'group') { o.op = d.op; o.children = d.children.map(orderedInstance) }
-  else { o.params = d.params.map(orderedParamDef); o.code = d.code }
+  else {
+    if (d.lang) o.lang = d.lang
+    o.params = d.params.map(orderedParamDef)
+    o.code = d.code
+    if (d.files) {
+      const files: Record<string, string> = {}
+      for (const k of Object.keys(d.files).sort()) files[k] = d.files[k]
+      o.files = files
+    }
+  }
   return o
 }
 
 /**
  * The file text: 2-space JSON, keys `format, version, app, name, savedAt, root, camera, defs`; defs sorted by id;
- * inside each def `id, name, kind, color, op|params, code|children`; instances `id, def, name, xf, color, params, hidden`.
+ * inside each def `id, name, kind, color, op|lang, params, code, files|children`; instances `id, def, name, xf, color, params, hidden`.
  * Arrays of plain numbers are written on one line ("t": [0, 0, 0]).
  */
 export function serialize(project: Project, savedAt: Date = new Date()): string {
@@ -148,10 +158,24 @@ function normalizeDef(key: string, rd: unknown, problems: string[]): Definition 
   const name = typeof rd.name === 'string' ? rd.name : key
   if (rd.kind === 'code') {
     if (typeof rd.code !== 'string') bad('code is missing')
+    const code = typeof rd.code === 'string' ? rd.code : ''
+    if (rd.lang !== undefined && rd.lang !== 'openscad') bad(`lang ${JSON.stringify(rd.lang)} must be "openscad" (or absent for JSCAD code)`)
+    if (rd.lang === 'openscad') {
+      // the code is the single source of truth: the stored params are derived again, whatever the file says
+      const def: CodeDef = { id: key, name, kind: 'code', code, params: scadParams(code), lang: 'openscad' }
+      if (rd.files !== undefined) {
+        const f = normalizeScadFiles(rd.files)
+        for (const x of f.problems) bad(x)
+        if (f.files) def.files = f.files
+      }
+      if (color) def.color = color
+      return def
+    }
+    if (rd.files !== undefined) bad('files are only for OpenSCAD code (lang "openscad")')
     const pp = paramDefProblems(rd.params)
     for (const x of pp) bad(x)
     const params = pp.length ? [] : (rd.params as ParamDef[]).map((p) => orderedParamDef(p))
-    const def: CodeDef = { id: key, name, kind: 'code', code: typeof rd.code === 'string' ? rd.code : '', params }
+    const def: CodeDef = { id: key, name, kind: 'code', code, params }
     if (color) def.color = color
     return def
   }

@@ -52,8 +52,9 @@ npm run dev                       # http://localhost:5173
 
 `tests/unit/*.test.ts` run in Node with vitest and the real JSCAD library: the pure core (graph expansion, ops,
 specs and keys, hashing, the file format, selection rules, transforms), the evaluation engine, the client with a fake
-worker, the store and history, autosave, the controller, picking, the MCP server and its handlers, and the AI chat's
-loop, tools, settings and provider adapters.
+worker, the store and history, autosave, the controller, picking, the MCP server and its handlers, the AI chat's
+loop, tools, settings and provider adapters, and the OpenSCAD interpreter and builder (`scad-*.test.ts`, with
+expected output recorded from the OpenSCAD 2021.01 binary).
 
 ```sh
 npm test
@@ -105,7 +106,8 @@ To try the chat by hand with a real provider, use your own key in the app. It st
 
 `npm run docs:shots` runs `tests/docs/*.spec.ts` with `playwright.docs.config.ts`. These scripts perform the manual's
 tutorials and reference views through the real UI (clicks, keys and drags) and write `docs/public/shots/<name>.png` at
-1440 × 900. If a tutorial step stops working, the run fails, which keeps the tutorials honest.
+1440 × 900 (the OpenSCAD editor shot uses a taller window). If a tutorial step stops working, the run fails, which
+keeps the tutorials honest.
 
 - The run starts its own dev server on port 5721 (`PW_PORT` changes it), without hot reload, so editing files during a
   run cannot reload the page in the middle of a sequence.
@@ -175,6 +177,11 @@ and deployment → Source: GitHub Actions*.
   code. If you change behavior the spec describes, update the comment, and add the difference to "Known deviations" at
   the top of `docs/design/spec-v0.1.md` if it is lasting.
 - **Pinned dependencies** with exact versions, and no new dependency without a reason.
+- **OpenSCAD support is a clean-room implementation.** OpenSCAD is GPL and its MCAD library LGPL, while 3Dica is MIT.
+  Don't copy or translate OpenSCAD's C++ source or its bundled `.scad` files into this repository. Work from the
+  OpenSCAD User Manual and compare with the binary (`openscad -o out.echo`, `-o out.stl`, `-D name=value`) on snippets
+  you write yourself; recording the binary's output as expected values in a test is fine. See
+  [OpenSCAD objects](/dev/architecture#openscad-objects) in the architecture notes.
 - **Formatting:** match the code around you. `.editorconfig` sets UTF-8, LF and 2-space indentation.
 - **Document user-visible changes** in the manual and in `CHANGELOG.md` under *Unreleased*.
 

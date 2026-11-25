@@ -47,13 +47,13 @@ export const mount: MountPanel = (el: HTMLElement, ctx: AppContext) => {
         rows.set(d.id, row)
       }
       row.def = d
-      const sig = [d.name, d.kind, d.kind === 'group' ? d.op : '', n, refs].join('|')
+      const sig = [d.name, d.kind, d.kind === 'group' ? d.op : d.lang ?? '', n, refs].join('|')
       if (sig !== row.sig && renaming?.def !== d.id) {
         row.sig = sig
         const countTitle = n === 0 ? (refs ? `No instances — used by code in ${refs} ${refs === 1 ? 'definition' : 'definitions'}` : 'Not used anywhere')
           : `${n} ${n === 1 ? 'occurrence' : 'occurrences'} in the scene`
         row.el.replaceChildren(
-          h('span', { class: `kind kind-${d.kind === 'code' ? 'code' : d.op === 'none' ? 'group' : 'bool'}` }, icon(defIconName(d))),
+          h('span', { class: `kind kind-${d.kind === 'code' ? 'code' : d.op === 'none' ? 'group' : 'bool'}`, title: d.kind === 'code' && d.lang === 'openscad' ? 'OpenSCAD object' : null }, icon(defIconName(d))),
           h('span', { class: 'lib-name', title: d.name }, d.name),
           n > 0 ? h('span', { class: 'lib-count', title: countTitle }, `×${n}`)
             : h('span', { class: 'lib-unused', title: countTitle }, refs ? 'part()' : 'unused'),

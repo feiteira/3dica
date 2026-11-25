@@ -78,14 +78,14 @@ export function toolCatalog(audience) {
     {
       name: 'list_definitions',
       title: 'List definitions (the Library)',
-      description: 'Every definition: name, kind (code/group), op (groups), params (ParamDef list for code), color, copies (occurrences in the scene), instances (placement records), usedByCode / uses (part() references), status and error {kind, message, line, col}.',
+      description: 'Every definition: name, kind (code/group), language (code: jscad/openscad), op (groups), params (ParamDef list for code), color, copies (occurrences in the scene), instances (placement records), usedByCode / uses (part() references), status and error {kind, message, line, col}.',
       input: {},
       annotations: RO,
     },
     {
       name: 'get_definition',
       title: 'Read one definition',
-      description: 'One definition in full: for code definitions the code and params; for groups the op and the children (instance id, definition, label, transform, overrides, color, hidden); plus color, usage, status and error.',
+      description: 'One definition in full: for code definitions the language (jscad or openscad), the code and params (an OpenSCAD object\'s params are read from its code) and, for OpenSCAD, its attached files (path and size) and the use/include files that are missing; for groups the op and the children (instance id, definition, label, transform, overrides, color, hidden); plus color, usage, status and error.',
       input: { name: z.string().describe('definition name, e.g. "Bolt"') },
       annotations: RO,
     },
@@ -109,13 +109,14 @@ export function toolCatalog(audience) {
     {
       name: 'create_object',
       title: 'Create a new object',
-      description: 'Create a NEW definition and place one instance of it. kind cube/sphere/cylinder/torus start from the toolbar templates (parameters width/depth/height; radius/segments; radius/height/segments; innerRadius/outerRadius), sitting on Z = 0; kind "code" starts from the blank code template unless you pass code; kind "group" makes an empty group (op none/union/subtract/intersect) to fill with add_instance (parent: its name). Without a transform the object is placed to the right of the existing ones, like the toolbar does. Waits for evaluation and returns the new path plus status, size in mm, warnings and errors.',
+      description: 'Create a NEW definition and place one instance of it. kind cube/sphere/cylinder/torus start from the toolbar templates (parameters width/depth/height; radius/segments; radius/height/segments; innerRadius/outerRadius), sitting on Z = 0; kind "code" starts from the blank code template unless you pass code — with language "openscad" it is an OpenSCAD object instead (code is OpenSCAD source; its parameters are its top-level assignments); kind "group" makes an empty group (op none/union/subtract/intersect) to fill with add_instance (parent: its name). Without a transform the object is placed to the right of the existing ones, like the toolbar does. Waits for evaluation and returns the new path plus status, size in mm, warnings and errors (OpenSCAD: also its echo/warning output).',
       input: {
         kind: z.enum(['cube', 'sphere', 'cylinder', 'torus', 'code', 'group']),
+        language: z.enum(['jscad', 'openscad']).optional().describe('kind "code" only: "jscad" (default) = a JavaScript function body; "openscad" = OpenSCAD source, run by the built-in interpreter. An OpenSCAD object\'s parameters are its top-level assignments of a number, true/false, or a string with a dropdown comment (Customizer comments like // [10:100] give ranges, // [a, b] a dropdown), so pass them in the code, not in params'),
         name: z.string().optional().describe('definition name (unique; default Cube, Cube 2, …)'),
-        code: z.string().optional().describe('code kinds: the function body (return a Geom3 or an array)'),
-        params: z.array(paramDefSchema).optional().describe('code kinds: replaces the parameter list'),
-        defaults: z.record(z.string(), paramValue).optional().describe('code kinds: change the defaults of existing parameters, e.g. {"width": 40, "height": 5}'),
+        code: z.string().optional().describe('code kinds: the function body (return a Geom3 or an array), or the OpenSCAD source for language "openscad"'),
+        params: z.array(paramDefSchema).optional().describe('JSCAD code only: replaces the parameter list (OpenSCAD objects read theirs from the code)'),
+        defaults: z.record(z.string(), paramValue).optional().describe('code kinds: change the defaults of existing parameters, e.g. {"width": 40, "height": 5} (OpenSCAD: rewrites the values in the code)'),
         op: opSchema.optional().describe('group only'),
         parent: z.union([z.array(z.string()), z.string()]).optional().describe('where to place it: an instance path of a group in the scene, or a group definition name (then every copy of that group gets it). Default: the scene root.'),
         transform: transformSchema.optional(),
@@ -126,7 +127,7 @@ export function toolCatalog(audience) {
     {
       name: 'update_definition',
       title: 'Edit a definition',
-      description: 'Change a definition — every copy of it updates (linked). code: new function body; params: replace the ParamDef list; defaults: change default values of existing parameters; op: group operation; color (#rrggbb, null clears); rename: new name (part() calls are rewritten). Waits for evaluation and returns status, size, warnings and errors with line numbers (line 1 = first line of the body).',
+      description: 'Change a definition — every copy of it updates (linked). code: new function body (OpenSCAD objects: new OpenSCAD source; its parameters follow from it); params: replace the ParamDef list (JSCAD code only — an OpenSCAD object\'s parameters are edited in its code); defaults: change default values of existing parameters (OpenSCAD: rewrites the values in the code); op: group operation; color (#rrggbb, null clears); rename: new name (part() calls are rewritten). Waits for evaluation and returns status, size, warnings and errors with line numbers (line 1 = first line of the body).',
       input: {
         name: z.string().describe('current definition name'),
         code: z.string().optional(),

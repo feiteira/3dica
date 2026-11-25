@@ -25,6 +25,23 @@ export interface StoreOptions {
   cap?: number
 }
 
+/**
+ * After a recipe ran on a structuredClone draft: point the draft's unchanged code texts and attached-file maps back at
+ * the previous snapshot's. Every history entry would otherwise keep its own copy of a large OpenSCAD library (200 steps
+ * of a 1 MB attachment = 200 MB); equal strings compare fast, and snapshots are never mutated, so sharing is safe.
+ */
+function shareUnchanged(draft: Project, before: Project): void {
+  for (const [id, d] of Object.entries(draft.defs)) {
+    const b = before.defs[id]
+    if (!b || b.kind !== 'code' || d.kind !== 'code') continue
+    if (d.code === b.code) d.code = b.code
+    if (d.files && b.files) {
+      const keys = Object.keys(d.files)
+      if (keys.length === Object.keys(b.files).length && keys.every((k) => Object.hasOwn(b.files!, k) && b.files![k] === d.files![k])) d.files = b.files
+    }
+  }
+}
+
 export function defaultUi(): UiState {
   return {
     selection: { kind: 'none' }, context: [], viewMode: 'context', ghostOthers: true,
@@ -70,6 +87,7 @@ export class Store {
       throw e
     }
     if (JSON.stringify(draft) === JSON.stringify(before)) return { ok: true, value, changed: false }
+    shareUnchanged(draft, before)
     this.history.record(label, before, opts, this.now())
     this.project = draft
     const ui = this.fixSelection(true)

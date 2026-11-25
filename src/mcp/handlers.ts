@@ -5,20 +5,21 @@
 // involved: the tab may be in the background) and report per-definition status, size and errors, so the model learns
 // about failures immediately.
 import type { AppContext, Box, CaptureOptions, RenderState } from '../app/context'
-import type { Definition, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform, UiState, Vec3 } from '../core/types'
+import type { CodeDef, Definition, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform, UiState, Vec3 } from '../core/types'
 import { IDENTITY_XF } from '../core/types'
 import * as ops from '../core/ops'
 import { linkedOffset, OpError } from '../core/ops'
 import {
-  defAtPath, expand, instanceAtPath, instancesOf, linkedChangeMessage, occurrenceCounts, pathKey, referrers, staticRefs,
+  defAtPath, defRefs, expand, instanceAtPath, instancesOf, linkedChangeMessage, occurrenceCounts, pathKey, referrers,
   type Occurrence,
 } from '../core/graph'
+import { isScad, SCAD_PARAMS_HINT, scadDepList, scadParams as scadParamsOf, setScadDefault } from '../core/scad'
 import { computeStlItems, computeWantedJobs, type Job } from '../core/evalspec'
-import type { EvalError } from '../eval/protocol'
+import type { ConsoleLine, EvalError } from '../eval/protocol'
 import { createTemplateDef, placementFor, type TemplateKind } from '../core/templates'
 import { APP_ID, emptyProject, parseProject, serialize } from '../core/project-io'
 import { sampleProject, SAMPLE_EXPANDED } from '../core/sample'
-import { paramDefProblems } from '../core/params'
+import { isValidParamValue, paramDefProblems } from '../core/params'
 import { cloneXf, unionBoxes } from '../core/transform'
 import { newId } from '../core/ids'
 import { librarySelectPatch, treeSelectPatch } from '../core/selection'
@@ -47,6 +48,8 @@ const TEMPLATE_KINDS: TemplateKind[] = ['cube', 'sphere', 'cylinder', 'torus', '
 const OPS: GroupOp[] = ['none', 'union', 'subtract', 'intersect']
 const WRAP_NAME: Record<GroupOp, string> = { none: 'Group', union: 'Union', subtract: 'Subtract', intersect: 'Intersect' }
 const MAX_ERRORS = 20
+/** OpenSCAD output lines a report includes (the rest are counted) */
+const MAX_OUTPUT = 40
 
 // ───────────────────────────── small pure helpers (exported for tests) ─────────────────────────────
 
@@ -90,8 +93,12 @@ export function mergeXf(base: Transform, p: unknown): Transform {
   return xf
 }
 
+/** Longest message or output line sent to the model (an echo of a big list is still useful in part, not in full). */
+const MAX_LINE_CHARS = 2000
+const clipLine = (s: string): string => (s.length > MAX_LINE_CHARS ? s.slice(0, MAX_LINE_CHARS) + ' … (cut)' : s)
+
 function errorOut(e: EvalError, ownerId?: Id): Record<string, unknown> {
-  const o: Record<string, unknown> = { kind: e.kind, message: e.message }
+  const o: Record<string, unknown> = { kind: e.kind, message: clipLine(e.message) }
   if (e.line !== undefined) o.line = e.line
   if (e.col !== undefined) o.col = e.col
   if (ownerId !== undefined && e.def !== ownerId) o.in = e.defName
@@ -102,6 +109,20 @@ function errorOut(e: EvalError, ownerId?: Id): Record<string, unknown> {
 function paramValue(v: unknown, what: string): ParamValue {
   if ((typeof v === 'number' && Number.isFinite(v)) || typeof v === 'boolean' || typeof v === 'string') return v
   throw new McpError(`${what} must be a number, true/false or text`)
+}
+
+/** An OpenSCAD object's console lines for the model: 'ECHO: "w = ", 40 (line 3)', at most MAX_OUTPUT. */
+export function outputOut(lines: ConsoleLine[] | undefined): string[] | undefined {
+  if (!lines?.length) return undefined
+  const tag = { echo: 'ECHO', warning: 'WARNING', error: 'ERROR', trace: 'TRACE' }
+  const out = lines.slice(0, MAX_OUTPUT).map((l) => `${tag[l.level]}: ${clipLine(l.text)}${l.line !== undefined ? ` (${l.file ? `${l.file}:${l.line}` : `line ${l.line}`})` : ''}`)
+  if (lines.length > MAX_OUTPUT) out.push(`… ${lines.length - MAX_OUTPUT} more lines`)
+  return out
+}
+
+/** An OpenSCAD object's parameters are its code's: why `params` is refused for one. */
+function scadParamsRefusal(def: CodeDef): string {
+  return `'${def.name}' is an OpenSCAD object: ${SCAD_PARAMS_HINT[0].toLowerCase()}${SCAD_PARAMS_HINT.slice(1)}. Pass the new code with update_definition (code), or change values with defaults.`
 }
 
 /** Apply { name: value } to the defaults of `params` (a new list). */
@@ -117,6 +138,37 @@ export function applyDefaults(params: ParamDef[], defaults: unknown, defName: st
   const problems = paramDefProblems(out)
   if (problems.length) throw new McpError(problems[0])
   return out
+}
+
+/** defaults for an OpenSCAD object, checked like applyDefaults: [name, value] pairs of existing parameters. */
+function scadDefaultEntries(def: CodeDef, defaults: unknown): [string, ParamValue][] {
+  if (defaults === undefined || defaults === null) return []
+  if (typeof defaults !== 'object' || Array.isArray(defaults)) throw new McpError('defaults must be an object like { width: 40 }')
+  return Object.entries(defaults as Record<string, unknown>).map(([k, v]) => {
+    if (!def.params.some((p) => p.name === k)) throw new McpError(`'${def.name}' has no parameter '${k}' (its code has ${def.params.map((p) => p.name).join(', ') || 'none'}; parameters are top-level assignments of a number, true/false, or a string with a dropdown comment like // [a, b])`)
+    return [k, paramValue(v, `defaults.${k}`)]
+  })
+}
+
+/** A new OpenSCAD def's code with `defaults` written into its literals (create_object). */
+function applyScadDefaults(def: CodeDef, defaults: unknown): string {
+  let code = def.code
+  const params = scadParamsOf(code)
+  for (const [k, v] of scadDefaultEntries({ ...def, params }, defaults)) {
+    const pd = params.find((p) => p.name === k)!
+    if (!isValidParamValue(pd, v)) throw new McpError(`defaults.${k}: '${k}' is a ${pd.type} parameter${pd.type === 'choice' ? ` (one of ${(pd.options ?? []).join(', ')})` : ''}`)
+    const next = setScadDefault(code, k, v)
+    if (next === null) throw new McpError(`Can't change '${k}' in the code of '${def.name}'`)
+    code = next
+  }
+  return code
+}
+
+/** update_definition defaults on an OpenSCAD def (inside the store draft). */
+function setScadDefaults(d: Project, def: CodeDef, defaults: unknown): void {
+  let entries: [string, ParamValue][]
+  try { entries = scadDefaultEntries(def, defaults) } catch (e) { throw new OpError((e as Error).message) }
+  for (const [k, v] of entries) ops.setScadParamDefault(d, def.id, k, v)
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -286,6 +338,7 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
         const keys = [...(rs.wanted.jobsOfDef.get(id) ?? [])]
         const own = extra.find((j) => j.spec.def === id)
         if (own) keys.push(own.resultKey)
+        if (isScad(def)) o.language = 'openscad'
         for (const k of keys) {
           const r = ctx.client.get(k)
           if (r?.state === 'ready') {
@@ -294,9 +347,15 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
             const b = r.entry.bbox
             if (!b.isEmpty()) o.size = rv([b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z], 1e-3)
             if (r.entry.warnings.length) o.warnings = r.entry.warnings
+            const out = isScad(def) ? outputOut(r.entry.console) : undefined
+            if (out) o.output = out
             break
           }
-          if (r?.state === 'failed' && !st?.error) { o.status = 'error'; o.error = errorOut(r.error, id) }
+          if (r?.state === 'failed') {
+            if (!st?.error) { o.status = 'error'; o.error = errorOut(r.error, id) }
+            const out = isScad(def) && r.error.def === id ? outputOut(r.error.console) : undefined
+            if (out) o.output = out
+          }
         }
         if (st?.error) o.error = errorOut(st.error, id)
         o.copies = counts.get(id) ?? 0
@@ -334,13 +393,13 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
     const st = rs.defStates.get(d.id)
     const o: Record<string, unknown> = { name: d.name, id: d.id, kind: d.kind }
     if (d.kind === 'group') { o.op = d.op; o.children = d.children.length }
-    else o.params = d.params
+    else { o.language = d.lang === 'openscad' ? 'openscad' : 'jscad'; o.params = d.params }
     if (d.color) o.color = d.color
     o.copies = rs.counts.get(d.id) ?? 0
     o.instances = instancesOf(rs.project, d.id).length
     const used = referrers(rs.project, d.id).map((id) => rs.project.defs[id].name)
     if (used.length) o.usedByCode = used
-    if (d.kind === 'code') { const refs = staticRefs(d.code); if (refs.length) o.uses = refs }
+    if (d.kind === 'code') { const refs = defRefs(d); if (refs.length) o.uses = refs }
     o.status = st?.status ?? 'idle'
     if (st?.error) o.error = errorOut(st.error, d.id)
     return o
@@ -477,8 +536,14 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
       const rs = fresh()
       const d = defNamed(p.name, 'name')
       const o = defSummary(rs, d)
-      if (d.kind === 'code') o.code = d.code
-      else {
+      if (d.kind === 'code') {
+        o.code = d.code
+        if (isScad(d)) {
+          o.files = Object.keys(d.files ?? {}).sort().map((path) => ({ path, chars: d.files![path].length }))
+          const missing = scadDepList(d.code, d.files).filter((x) => x.resolved === null).map((x) => x.name)
+          if (missing.length) o.missingFiles = missing
+        }
+      } else {
         o.children = d.children.map((c) => {
           const x: Record<string, unknown> = { id: c.id, definition: rs.project.defs[c.def]?.name ?? c.def }
           if (c.name) x.label = c.name
@@ -506,16 +571,27 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
     async create_object(p) {
       const kind = p.kind as TemplateKind
       if (!TEMPLATE_KINDS.includes(kind)) throw new McpError(`kind must be one of ${TEMPLATE_KINDS.join(', ')}`)
+      const language = p.language ?? 'jscad'
+      if (language !== 'jscad' && language !== 'openscad') throw new McpError('language must be jscad or openscad')
+      if (language === 'openscad' && kind !== 'code') throw new McpError('language is only for kind "code" (an OpenSCAD object: kind "code", language "openscad")')
       const rs = fresh()
       const project = P()
       const parent = parentOf(rs, p.parent)
       const codeDefs = Object.values(project.defs).filter((d) => d.kind === 'code').length
-      const def = createTemplateDef(kind, project, codeDefs)
+      const def = createTemplateDef(language === 'openscad' ? 'openscad' : kind, project, codeDefs)
       if (p.name !== undefined) {
         if (typeof p.name !== 'string') throw new McpError('name must be text')
         def.name = p.name.trim()
       }
-      if (def.kind === 'code') {
+      if (def.kind === 'code' && isScad(def)) {
+        if (p.code !== undefined) {
+          if (typeof p.code !== 'string') throw new McpError('code must be text')
+          def.code = p.code
+        }
+        if (p.params !== undefined) throw new McpError(scadParamsRefusal(def))
+        if (p.op !== undefined) throw new McpError('op is only for kind "group"')
+        def.code = applyScadDefaults(def, p.defaults)
+      } else if (def.kind === 'code') {
         if (p.code !== undefined) {
           if (typeof p.code !== 'string') throw new McpError('code must be text')
           def.code = p.code
@@ -566,10 +642,14 @@ export function createHandlers(ctx: AppContext, opts: HandlerOptions = {}): Reco
           ops.setCode(d, def.id, p.code)
           codeChanged.push(def.id)
         }
-        if (p.params !== undefined) ops.setParamDefs(d, def.id, p.params as ParamDef[])
+        if (p.params !== undefined) {
+          if (isScad(x)) throw new OpError(scadParamsRefusal(x))
+          ops.setParamDefs(d, def.id, p.params as ParamDef[])
+        }
         if (p.defaults !== undefined) {
           if (x.kind !== 'code') throw new OpError('Groups have no parameters')
-          ops.setParamDefs(d, def.id, applyDefaults(x.params, p.defaults, x.name))
+          if (isScad(x)) setScadDefaults(d, x, p.defaults)
+          else ops.setParamDefs(d, def.id, applyDefaults(x.params, p.defaults, x.name))
         }
         if (p.op !== undefined) {
           if (!OPS.includes(p.op as GroupOp)) throw new OpError(`op must be one of ${OPS.join(', ')}`)

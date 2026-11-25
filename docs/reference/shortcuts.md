@@ -74,7 +74,7 @@ Shortcuts are also off while a dialog is open, and <kbd>Enter</kbd> or <kbd>Spac
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo. |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo. |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the project as `<name>.3dica.json`. Also works in fields and the editor. |
-| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a `.3dica.json` file. |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a `.3dica.json` file. **Import** (`.scad` files) has no key. |
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Run code: apply the code you are typing now, run a paused project, and retry what failed (for the selected object's definition, or everything when nothing is selected). Also works in fields and the editor. |
 
 ### Panels
@@ -136,6 +136,8 @@ The most useful CodeMirror keys:
 
 <kbd>Tab</kbd> does not indent in the editor: it moves the keyboard to the next control. Use <kbd>Ctrl</kbd>+<kbd>]</kbd> to indent.
 
+The keys are the same for [OpenSCAD objects](/guide/openscad#edit-the-code). There, <kbd>Ctrl</kbd>+<kbd>Space</kbd> offers OpenSCAD's built-in modules, functions and special variables and the names the code defines, and <kbd>Ctrl</kbd>+<kbd>/</kbd> comments with `//`.
+
 <kbd>Ctrl</kbd>+<kbd>L</kbd> opens the chat, so CodeMirror's own "select line" on that key is not available. Triple-click a line to select it.
 
 On macOS, CodeMirror uses its own Mac keys for a few of these: <kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>[</kbd> / <kbd>]</kbd> folds and unfolds, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> toggles a block comment.
@@ -181,3 +183,4 @@ On the tab bar above the panel, <kbd>←</kbd> <kbd>→</kbd> (or <kbd>↑</kbd>
 | Library | Click, double-click, drag | Select and isolate, rename, add to the tree |
 | Breadcrumb | Click a segment | Select or enter that level |
 | Anywhere | Drop a `.3dica.json` file | Open it |
+| Anywhere | Drop `.scad` files | Import them as OpenSCAD objects |

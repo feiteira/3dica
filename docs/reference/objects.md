@@ -4,7 +4,7 @@ This page lists every command that creates, selects, copies, restructures, hides
 
 ## Create
 
-The first six toolbar buttons each add a new **definition** and one **instance** of it.
+The first seven toolbar buttons each add a new **definition** and one **instance** of it.
 
 | Button | New definition | Parameters: default (min–max, step) | Shape |
 |---|---|---|---|
@@ -13,15 +13,18 @@ The first six toolbar buttons each add a new **definition** and one **instance**
 | **Cyl** | `Cylinder` | `radius` 5 (0.1–500, 0.5), `height` 10 (0.1–500, 1), `segments` 32 (4–128, 1) | A cylinder standing on the XY plane |
 | **Torus** | `Torus` | `innerRadius` 1.5 (0.1–100, 0.1), `outerRadius` 6 (0.5–500, 0.5) | A ring lying on the XY plane |
 | **Code** | `Object` | `size` 10 (0.1–500, 1) | A rounded cube, with a comment header that reminds you of the API |
+| **OpenSCAD** | `Object` | `size` 10 (1–100), read from its code | A cube written in OpenSCAD, with a comment header about parameters and `part()`. See [OpenSCAD objects](/guide/openscad). |
 | **Group** | `Group` | none | An empty plain group (op `none`) |
 
 Every shape sits on Z = 0 and is centred in X and Y, so the instance position is the centre of its base. The primitives are ordinary code objects: select one and you can read and change its code in the editor. A second cube is named `Cube 2`, then `Cube 3`, and so on.
 
 **Where it goes.** The new instance is added at the end of the **current group**: the group you are inside, or the scene's top level. If that group occurs more than once, every copy gets the object, and a toast says so (`Added to 'Fixture' — 2 copies updated`).
 
-**Where it is placed.** 3Dica puts it 5 mm to the right of everything already in that group. The X position is `ceil(maxX + 5 + halfWidth)`, where `maxX` is the right edge (largest X) of the visible, evaluated objects in the group, and `halfWidth` is 5 for a cube, cylinder or code object, 6 for a sphere and 7.5 for a torus. Y and Z are 0. In an empty group, or before anything is evaluated, the object goes to the origin.
+**Where it is placed.** 3Dica puts it 5 mm to the right of everything already in that group. The X position is `ceil(maxX + 5 + halfWidth)`, where `maxX` is the right edge (largest X) of the visible, evaluated objects in the group, and `halfWidth` is 5 for a cube, cylinder, code or OpenSCAD object, 6 for a sphere and 7.5 for a torus. Y and Z are 0. In an empty group, or before anything is evaluated, the object goes to the origin.
 
 The new object is selected with the gizmo on it, and the view frames it if it is off screen. Each new code object gets the next colour of an eight-colour palette as its definition colour. A new group gets none. Undo label: `Add Cube`.
+
+**Import** in the toolbar adds `.scad` files the same way, as OpenSCAD objects in the current group, in one undo step (`Import bracket.scad`). See [What Import does](/guide/openscad#what-import-does).
 
 ::: tip Adding to the top level
 A tree click enters the clicked row's group. Press <kbd>Esc</kbd> until the breadcrumb shows only `Scene`, or click `Scene` in it, before you add.
@@ -83,7 +86,7 @@ Copy is not an undo step. Paste is: `Paste Bolt sizes`, `Paste unique Bolt sizes
 
 ## Make unique
 
-<kbd>U</kbd>, or **Make unique** in the inspector, points the selected instance at a clone of its definition. The clone gets a new name and the same code, parameters and colour. A group clone gets new instance records for its children, with the same child definitions. A toast names the result: `'Bolt' → new definition 'Bolt 2'`.
+<kbd>U</kbd>, or **Make unique** in the inspector, points the selected instance at a clone of its definition. The clone gets a new name and the same code, parameters and colour. An OpenSCAD clone keeps its language and its attached files. A group clone gets new instance records for its children, with the same child definitions. A toast names the result: `'Bolt' → new definition 'Bolt 2'`.
 
 It needs a definition with at least two instance records. Otherwise it is refused with `Only instance of 'Plate'. To diverge a copy of a linked group's child, Make Unique the group first.` Making a child of a linked group unique changes that child in every copy of the group. [Unique copies and Make unique](/concepts/model#unique-copies-and-make-unique) explains why, with the sample. Undo label: `Make unique Bolt`.
 
@@ -132,7 +135,7 @@ Drag a row of the Scene tree to move it. Where it lands depends on where you rel
 - **Invalid targets** show a red line or a red highlight, and dropping there does nothing. You can't drop an object into itself or into its own children, or put a group inside itself, even indirectly through `part()`.
 - Moving into or out of a group that occurs more than once changes every copy, with a toast.
 
-Undo labels: `Move Bolt`, `Copy Bolt`, `Add Plate`. A file dropped anywhere on the window opens it instead (see [Files](/reference/files)).
+Undo labels: `Move Bolt`, `Copy Bolt`, `Add Plate`. A file dropped anywhere on the window is handled as a file instead: `.scad` files are imported as OpenSCAD objects, and a project file is opened (see [Files](/reference/files#save-and-open)).
 
 ## Hide and unhide
 
@@ -188,6 +191,6 @@ A **definition name**:
 - can't be `Scene`;
 - must be unique (case-sensitive): `'Plate' is already used`.
 
-Renaming a definition **rewrites every `part('Old'` and `part("Old"` call** in every code object to the new name, and the editor reloads if it shows one of them. Undo label: `Rename Bolt → Screw`.
+Renaming a definition **rewrites every `part('Old'` and `part("Old"` call** in every code object to the new name, and the editor reloads if it shows one of them. In an OpenSCAD object the calls in its attached files are rewritten too. An OpenSCAD object whose code, or a file it uses or includes, defines its own `module part` is left alone: its `part()` calls are not 3Dica references. Renaming an OpenSCAD object does not change its code. Undo label: `Rename Bolt → Screw`.
 
 A **label** can be any text up to 200 characters, and two instances can share one. The sample's fixtures are labelled `Fixture A` and `Fixture B`, so <kbd>F2</kbd> on their rows edits the label. Rename the `Fixture` definition from the Library or the inspector's **Name** field. Undo label: `Label Fixture A`.

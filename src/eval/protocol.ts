@@ -8,7 +8,7 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: 'ready'; lineOffset: number; flatNames: number }
-  | { type: 'result'; id: number; resultKey: string; ok: true;  meshes: MeshData[]; tris: number; ms: number; warnings: string[] }
+  | { type: 'result'; id: number; resultKey: string; ok: true;  meshes: MeshData[]; tris: number; ms: number; warnings: string[]; console?: ConsoleLine[] }
   | { type: 'result'; id: number; resultKey: string; ok: false; error: EvalError; ms: number }
   | { type: 'stl';    id: number; ok: true;  parts: ArrayBuffer[]; tris: number }
   | { type: 'stl';    id: number; ok: false; error: EvalError }
@@ -23,4 +23,19 @@ export interface EvalError {
   def: Id; defName: string          // the def whose code actually failed (innermost)
   message: string; line?: number; col?: number
   trace: string[]                   // def names from the job root to the failing def
+  /** OpenSCAD code: the console output printed before the error (echo, warnings), then the error and its call trace */
+  console?: ConsoleLine[]
+}
+
+/**
+ * One line of an OpenSCAD object's console (the Output panel), like OpenSCAD prints it: `ECHO: "w = ", 40`,
+ * `WARNING: …`, `ERROR: …`, `TRACE: called by 'plate()' …`. `line` / `col` point into the object's own code when
+ * `file` is absent, into that attached file otherwise.
+ */
+export interface ConsoleLine {
+  level: 'echo' | 'warning' | 'error' | 'trace'
+  text: string
+  line?: number
+  col?: number
+  file?: string
 }

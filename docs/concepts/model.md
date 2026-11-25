@@ -6,7 +6,7 @@ Most of 3Dica follows from one idea: **you place definitions, you don't copy geo
 
 | Term | What it is | Where you see it |
 |---|---|---|
-| **Definition** | A reusable, named thing. A **code definition** is a JSCAD function body plus a parameter list. A **group definition** holds child instances and has an operation (`none`, `union`, `subtract` or `intersect`). | The **Library** lists every definition once. |
+| **Definition** | A reusable, named thing. A **code definition** is a JSCAD function body plus a parameter list, or OpenSCAD code whose parameters come from the code (an [OpenSCAD object](/guide/openscad)). A **group definition** holds child instances and has an operation (`none`, `union`, `subtract` or `intersect`). | The **Library** lists every definition once. |
 | **Instance** | One placement of a definition *inside a group*. It has a transform, an optional label, an optional colour, parameter overrides and a hidden flag. | The inspector's **Instance** section. |
 | **Occurrence** | One copy that is actually drawn. An instance inside a group that is itself placed twice produces two occurrences. | Each row of the **Scene** tree, and each object in the view. |
 
@@ -160,12 +160,12 @@ The selected occurrence is always solid with a blue tint and a light-blue outlin
 
 ## Colours
 
-Colours are a display setting. Changing one never re-evaluates any code. A colour can be set in three places: on an **instance** (inspector, Instance section), on a **definition** (inspector, Definition section), or **in code** with `colorize()`.
+Colours are a display setting. Changing one never re-evaluates any code. A colour can be set in three places: on an **instance** (inspector, Instance section), on a **definition** (inspector, Definition section), or **in code** with `colorize()` (OpenSCAD: `color()`).
 
 A code object is drawn in the first colour that applies:
 
 1. the **outermost instance colour** on its path (a colour on Fixture A wins over a colour on a bolt inside it);
-2. the colour baked into the geometry by `colorize()`;
+2. the colour baked into the geometry by `colorize()`, or by `color()` in OpenSCAD code;
 3. the definition colour;
 4. the default grey `#9aa4b2`.
 
@@ -176,7 +176,7 @@ A boolean result is drawn in:
 3. the first visible operand's colour (its instance colour, otherwise its definition colour);
 4. the default grey.
 
-A new object from the toolbar's Cube, Sphere, Cyl, Torus or Code button gets the next colour of an eight-colour palette as its definition colour. A new group gets no colour.
+A new object from the toolbar's Cube, Sphere, Cyl, Torus, Code or OpenSCAD button, or from Import, gets the next colour of an eight-colour palette as its definition colour. A new group gets no colour.
 
 ::: tip
 The note next to the inspector's instance colour (`own color`, `from definition` or `default`) describes that instance only. A colour set on an enclosing group still wins in the view.

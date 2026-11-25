@@ -435,7 +435,7 @@ export class EvalClient implements EvalClientApi {
         this.finishInFlight()
         if (msg.ok) {
           this.failures.delete(f.key)
-          this.cache.set(f.key, toMeshEntry(msg.meshes, msg.tris, msg.ms, msg.warnings))
+          this.cache.set(f.key, toMeshEntry(msg.meshes, msg.tris, msg.ms, msg.warnings, msg.console))
         } else {
           this.failures.set(f.key, msg.error)
         }

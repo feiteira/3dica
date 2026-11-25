@@ -1,7 +1,8 @@
 # Files, autosave and STL
 
 3Dica keeps your work in three ways: an **autosave** in the browser, project files you **save** and **open**
-(`.3dica.json`), and **STL** exports for slicers and other CAD tools. Everything happens in your browser. Nothing is
+(`.3dica.json`), and **STL** exports for slicers and other CAD tools. It also **imports** OpenSCAD `.scad` files into
+the open project. Everything happens in your browser. Nothing is
 uploaded anywhere, unless you use the [AI chat](/guide/ai-chat): it sends what the assistant reads to the AI
 provider you chose.
 
@@ -123,6 +124,7 @@ Select that object, fix its code (for example lower its `segments`), then click 
 |---|---|
 | Save | <kbd>Ctrl</kbd>+<kbd>S</kbd> (works in text fields and in the code editor too), or **Save** in the toolbar |
 | Open | <kbd>Ctrl</kbd>+<kbd>O</kbd>, **Open** in the toolbar, or drop a file anywhere on the window |
+| Import `.scad` files | **Import** in the toolbar, or drop them anywhere on the window |
 
 **Save** downloads `<project name>.3dica.json` to your browser's download folder. Characters that file systems reject
 (`\ / : * ? " < > |`) are replaced with `_`. The file includes the current camera, so opening it later shows the same
@@ -140,8 +142,22 @@ The project name is shown at the top of the Scene panel. New projects are called
   is restored.
 
 Dropping a file on the window does the same as Open. While you drag a file over 3Dica, the window shows *Drop a
-.3dica.json file to open it*. Only the first file of a multi-file drop is used, and dragging rows inside the Scene tree
-is not affected.
+.3dica.json file to open it, or .scad files to import them*. If any of the dropped files is a `.scad` file, they all go
+to [Import](#import-openscad-files) instead. Otherwise only the first file of a multi-file drop is used. A file dropped
+on the code editor is opened or imported the same way; its text is never pasted into the code. Dragging rows inside the
+Scene tree is not affected.
+
+## Import OpenSCAD files
+
+**Import** in the toolbar picks one or more `.scad` files and **adds** them to the open project as
+[OpenSCAD objects](/guide/openscad), in the current group. It never replaces the project. Files that another chosen
+file uses or includes are attached to that object instead of becoming objects of their own. The whole import is one
+undo step, labelled `Import bracket.scad`, or `Import 3 files`. Import doesn't ask *Run it?*, because OpenSCAD code is
+interpreted and never runs as JavaScript.
+
+To get the code back out, select the object and click **Export .scad** in the Inspector's **Files** section. It
+downloads `<name>.scad`, and each attached file has its own Download button. See
+[What Import does](/guide/openscad#what-import-does) for the details.
 
 ## The "Run it?" prompt and paused mode
 
@@ -149,7 +165,7 @@ is not affected.
 
 Code in a 3Dica project is JavaScript that runs on your computer. It runs in a Web Worker, but **there is no
 sandbox**: it can do what any script on a web page can do from a worker, such as make network requests or use up your
-CPU and memory. So when you open a file that contains any Code object (and every primitive is one), 3Dica asks:
+CPU and memory. So when you open a file that contains any code object (and every primitive is one), 3Dica asks:
 
 > This file contains code that runs on your computer. Run it?
 
@@ -168,6 +184,9 @@ While a project is paused:
 - the paused state is saved with the autosave, so a reload or a reopened tab is still paused.
 
 Read the code, then click **Run code** (or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>) when you trust it.
+
+OpenSCAD objects count as code here too, so a project with only OpenSCAD objects also asks, and opens paused if you
+choose so. Their code can only make shapes, but the file can also hold JavaScript objects you haven't seen yet.
 
 ## New and Sample
 
@@ -277,8 +296,10 @@ Reading it:
 | `name` | all | Unique, case-sensitive, 1 to 64 characters, no leading or trailing space, no quotes, backticks, backslashes or line breaks. `Scene` is reserved for the root. `part()` calls use this name. |
 | `kind` | all | `"code"` or `"group"` |
 | `color` | all, optional | `"#rrggbb"`. Used when no instance color is set. |
-| `params` | code | The parameter list: see below |
+| `lang` | code, optional | `"openscad"` for an [OpenSCAD object](/guide/openscad). Left out for JavaScript (JSCAD) code. |
+| `params` | code | The parameter list: see below. For an OpenSCAD object it is read again from the code when the file is opened, whatever the file says. |
 | `code` | code | The code, as one string with `\n` line breaks |
+| `files` | OpenSCAD code, optional | The [attached files](/guide/openscad#attached-files): an object of relative path → text, sorted by path, such as `{ "lib/holes.scad": "module screw_hole(…) …" }`. At most 200 files, 2 MB each and 16 MB in all. |
 | `op` | group | `"none"` (assembly), `"union"`, `"subtract"` (the first visible child minus the others) or `"intersect"` |
 | `children` | group | The instances inside the group, in order |
 
@@ -322,9 +343,13 @@ Some problems a file can have, as the Open dialog words them:
 - `Instance "i_a" in 'Scene': scale can't be 0`
 - `Definition 'Bad "name"': the name can't contain quotes, backticks, backslashes or line breaks`
 - `Definition 'Widget': parameter 'my size': name must be a valid identifier`
+- `Definition 'bracket': lang "python" must be "openscad" (or absent for JSCAD code)`
+- `Definition 'bracket': files are only for OpenSCAD code (lang "openscad")`
+- `Definition 'bracket': files: '../x.scad' points outside the object's files ('..' climbs above the root)`
 
 ### Versions
 
-Version `1` is the only format so far. A file with a higher version is refused with the message above, so an older
+Version `1` is the only format so far. OpenSCAD objects added the optional `lang` and `files` fields without a new
+version: an older 3Dica that doesn't know them drops them and opens the object as JavaScript code, which then fails. A file with a higher version is refused with the message above, so an older
 3Dica never half-reads a newer file. The loader runs every file through a table of upgrade steps, one per version,
 before it checks it, so that a future format can still open the files you save today.

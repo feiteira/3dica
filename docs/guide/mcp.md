@@ -150,7 +150,7 @@ runs reports *port 6173 is already in use* in every tool. Give the second one `-
 ## How the assistant works
 
 The server gives the model a short briefing when it connects: units are millimetres, Z is up, what a code definition
-is, and the recommended loop. In short:
+is (JavaScript or OpenSCAD), and the recommended loop. In short:
 
 1. **Change one thing**, for example `create_object` or `update_definition`.
 2. **Read the result.** Every editing tool waits for the evaluation to finish and reports the status of the objects it
@@ -191,6 +191,11 @@ And this is `update_definition` with code that throws on its second line:
 }
 ```
 
+For an OpenSCAD object, the entry in `objects` also has `"language": "openscad"` and, when the code printed
+anything, `output`: its console lines, at most 40, such as `"ECHO: \"Hole spacing: 20 mm\" (line 20)"` or
+`"WARNING: Ignoring unknown variable 'w' (line 3)"`. A line or error message longer than 2,000 characters is cut there
+and ends in ` … (cut)`.
+
 `"ok": true` means the edit was made. Whether the code works is in `objects` and `errors`. A refused edit (an
 unknown name, a definition that is still in use) comes back as a tool error with a message instead.
 
@@ -214,8 +219,8 @@ the difference between definitions, instances and occurrences.
 |---|---|---|
 | `status` | none | Whether a tab is connected and how to connect one; the project name, counts, selection, view mode, evaluator state, error count, the last undo and redo labels, the camera |
 | `get_scene` | `path` (a subtree), `depth`, `maxNodes` (default 500), `bbox` (default true) | The occurrence tree: path, label, definition, kind and op, operand role inside a boolean (base, cut, other), local transform, color, overrides, hidden, status, world bounding box in mm |
-| `list_definitions` | none | Every definition: kind, op, parameters, color, copies in the scene, instance records, `part()` references both ways, status, error |
-| `get_definition` | `name` | One definition in full: its code and parameters, or its op and children |
+| `list_definitions` | none | Every definition: kind, `language` of a code definition (`jscad` or `openscad`), op, parameters, color, copies in the scene, instance records, `part()` references both ways, status, error |
+| `get_definition` | `name` | One definition in full: its language, code and parameters, or its op and children. For an OpenSCAD object also `files` (the attached files' paths and sizes, not their text) and `missingFiles` (what its `use` and `include` name but is not attached) |
 | `get_errors` | none | Every definition in error: kind, message, line, column, the inner definition that failed and the trace |
 | `help` | none | The code API cheat sheet (also the resource `threedica://docs/code-api`) |
 
@@ -225,8 +230,8 @@ Each of these is one undo step, and each returns the evaluation report shown abo
 
 | Tool | Parameters | What it does |
 |---|---|---|
-| `create_object` | `kind` (cube, sphere, cylinder, torus, code, group), `name`, `code`, `params`, `defaults`, `op`, `parent`, `transform`, `color` | Makes a **new** definition and places one instance of it. The primitives start from the toolbar templates and sit on Z = 0. `parent` is a group's instance path, or a group definition's name (then every copy of that group gets the object); the default is the scene root. Without `transform` the object is placed to the right of the others, as the toolbar does. |
-| `update_definition` | `name`, then any of `code`, `params`, `defaults`, `op`, `color` (`null` clears), `rename` | Changes a definition, and so every copy of it. A rename rewrites the `part()` calls. |
+| `create_object` | `kind` (cube, sphere, cylinder, torus, code, group), `language` (`jscad`, the default, or `openscad`, for kind `code` only), `name`, `code`, `params`, `defaults`, `op`, `parent`, `transform`, `color` | Makes a **new** definition and places one instance of it. The primitives start from the toolbar templates and sit on Z = 0. With `language: "openscad"` the code is OpenSCAD source and the object is an [OpenSCAD object](/guide/openscad): its parameters come from the code, so `params` is refused, and `defaults` rewrites the values in the code. `parent` is a group's instance path, or a group definition's name (then every copy of that group gets the object); the default is the scene root. Without `transform` the object is placed to the right of the others, as the toolbar does. |
+| `update_definition` | `name`, then any of `code`, `params`, `defaults`, `op`, `color` (`null` clears), `rename` | Changes a definition, and so every copy of it. A rename rewrites the `part()` calls. For an OpenSCAD object, `params` is refused with a hint to edit the code instead, and `defaults` rewrites the values in the code. |
 | `add_instance` | `definition`, `parent`, `transform`, `params` (overrides), `label`, `color`, `index` | Places another linked copy of an existing definition, in the scene root unless you give a `parent` (as for `create_object`). The default transform is the parent's origin, and the default `index` is last. |
 | `update_instance` | `path`, then any of `transform` (only the fields you give), `params` (`null` removes an override), `label` (`null` clears), `color` (`null` clears), `hidden` | Changes one placed object. An instance inside a group definition exists in every copy of that group, and the result says so. |
 | `move_instance` | `path`, `toParent` (a group's path, `[]` for the scene root), `index` | Moves an object into another group, keeping its world position, like dragging it in the tree |
@@ -245,6 +250,11 @@ Each of these is one undo step, and each returns the evaluation report shown abo
 `defaults` is shorter when you only want other values, for example `{ "width": 40, "depth": 30, "height": 5 }` for a
 cube. `transform` is `{ "t": [x, y, z], "r": [x, y, z], "s": [x, y, z] }` with millimetres, degrees and scale factors,
 as in [Transforms and the gizmo](/reference/transforms).
+
+The `params` of `add_instance` and `update_instance` are overrides, `{ "name": value }`. A choice takes its option
+text; for an OpenSCAD object also the drop-down item's value, so `{ "holes": 3 }` works for `holes = 2; // [0, 1, 2, 3]`
+and `{ "size": 30 }` for `size = 20; // [10:Small, 30:Large]`. A wrong value is refused with the options:
+`Invalid value for 'size': it must be one of "Small", "Large"`.
 
 ### History, selection and view
 

@@ -33,24 +33,42 @@ for a mouse and keyboard, so phones and tablets are not supported.
 ### How is it different from OpenSCAD?
 
 The modeling idea is the same: code makes solids, booleans combine them, and parameters make them reusable. The
-differences are the language (JavaScript with [JSCAD](https://github.com/jscad/OpenJSCAD.org) instead of the OpenSCAD
-language) and the workbench around it: each object has its own code, objects sit in a scene tree, copies stay linked to
-their definition, and you can select, isolate and move things with the mouse. See
-[Coming from OpenSCAD](/guide/coming-from-openscad).
+difference is the workbench around the code: each object has its own code, objects sit in a scene tree, copies stay
+linked to their definition, and you can select, isolate and move things with the mouse. An object's code is either
+JavaScript with [JSCAD](https://github.com/jscad/OpenJSCAD.org) or OpenSCAD code, which 3Dica runs with its own
+interpreter. See [Coming from OpenSCAD](/guide/coming-from-openscad).
 
-### Can I open my .scad files?
+### Can 3Dica open OpenSCAD files?
 
-Not directly. There is no OpenSCAD import. Most OpenSCAD code ports to JSCAD line by line, and
-[Coming from OpenSCAD](/guide/coming-from-openscad) has a translation table.
+Yes. Click **Import** in the toolbar, or drop `.scad` files on the window. Each file becomes an
+[OpenSCAD object](/guide/openscad) in the current project: its code stays OpenSCAD, and 3Dica's built-in interpreter
+runs it, following OpenSCAD 2021.01. You don't need OpenSCAD installed.
+
+- Choose a file together with the files it uses or includes, and they are attached to it.
+- Its top-level variables become parameters, with the Customizer's sliders and drop-downs, and each copy can override
+  them.
+- `import()`, `surface()` and DXF files are not supported, and `text()` uses a built-in single-stroke font.
+
+[OpenSCAD support](/reference/openscad) lists every built-in module and function.
+
+### Can I use MCAD, BOSL2 or other OpenSCAD libraries?
+
+In an OpenSCAD object, yes, if you attach the library files it uses: `use <…>` and `include <…>` only read files
+attached to the object, because 3Dica can't read your disk. Choose them together with your file in **Import**, or
+attach them later in the Inspector's **Files** list, which shows what is missing. MCAD was tested this way. Larger
+libraries such as BOSL2 have not been tested: they make the project bigger (an autosave holds about 5 MB in Chromium)
+and may hit the [limits](/reference/openscad#limits). JavaScript objects can't use OpenSCAD libraries.
 
 ### Can I import STL, STEP, SVG or DXF files?
 
-No. Every shape in 3Dica is made by code. Imported meshes and drawings are not supported in v0.1.
+No. Every shape in 3Dica is made by code. Imported meshes and drawings are not supported in v0.1, also not through
+OpenSCAD's `import()`.
 
 ### What can I export?
 
 Binary **STL** (for slicers and most CAD tools) and the **`.3dica.json`** project file. STL export writes the selected
-object, or the whole scene, in millimetres, without colors and without merging overlapping solids.
+object, or the whole scene, in millimetres, without colors and without merging overlapping solids. An OpenSCAD
+object's code can be downloaded as a `.scad` file with **Export .scad** in the Inspector.
 
 ### What units does 3Dica use?
 
@@ -66,9 +84,10 @@ code of each object, then click **Run code**. See [the Run it? prompt](/referenc
 
 ### Can I use npm packages or share helper functions between objects?
 
-Not in v0.1. Code cannot `import` or `require` anything, and definitions cannot share functions. What they can share
-is **geometry**: one object can use another's shape with `part('Name', overrides)`. Write small helpers inside the
-object that needs them.
+Not in v0.1. JavaScript code cannot `import` or `require` anything, and definitions cannot share functions. What they
+can share is **geometry**: one object can use another's shape with `part('Name', overrides)`. Write small helpers
+inside the object that needs them. An OpenSCAD object can `use` or `include` its own attached files, but objects don't
+share them: attach the file to each object that needs it.
 
 ### How do I make an array or a pattern?
 
@@ -81,8 +100,8 @@ Two ways:
 
 ### Can groups have parameters?
 
-No. Parameters belong to Code objects. To make a parametric assembly, write a Code object that builds the assembly
-with `part()` and passes its parameters on. See [Parameters](/reference/parameters).
+No. Parameters belong to code objects (JavaScript or OpenSCAD). To make a parametric assembly, write a code object
+that builds the assembly with `part()` and passes its parameters on. See [Parameters](/reference/parameters).
 
 ### Can I select several objects at once?
 
@@ -136,8 +155,9 @@ kept and who else can read browser storage.
 
 ### Does 3Dica use the GPU for modeling?
 
-No. The GPU only draws the result. The modeling itself is done by JSCAD on the CPU, in a Web Worker, so the page stays
-responsive while it works.
+No. The GPU only draws the result. The modeling itself is done on the CPU, in a Web Worker, so the page stays
+responsive while it works: by JSCAD for JavaScript objects, and by 3Dica's OpenSCAD interpreter and its geometry code,
+built on JSCAD, for OpenSCAD objects.
 
 ### How do I report a bug or ask for a feature?
 
@@ -154,17 +174,23 @@ These are the known limits of v0.1.
   not from constrained 2D sketches, fillet tools or a B-rep kernel. There is no STEP export for the same reason.
 - **JSCAD speed.** Booleans (`union`, `subtract`, `intersect`), hulls and Minkowski sums get slow on detailed meshes.
   One evaluation runs at a time.
-- **2D shapes are not shown.** Code must return 3D geometry. Extrude 2D shapes before returning them.
+- **2D shapes are not shown.** JavaScript code must return 3D geometry: extrude 2D shapes before returning them. A 2D
+  result of OpenSCAD code is shown 1 mm thick, like OpenSCAD's preview.
+- **OpenSCAD objects:** no `import()`, `surface()` or DXF files, `text()` in a built-in single-stroke font, no
+  animation (`$t` is 0), and recursion stops at a few hundred nested calls in Chrome (tail recursion has no
+  limit). See [What differs from OpenSCAD](/guide/openscad#what-differs-from-openscad).
 - **No group parameters,** no parameters that flow from a group into its children, and no expressions in overrides.
-- **No shared code.** No `import`, no npm packages, and no helper functions shared between objects.
+- **No shared code.** No `import`, no npm packages, and no helper functions shared between objects. An OpenSCAD
+  object's attached files belong to that object only.
 - **Evaluation limits.** 20 s per evaluation (adjustable with `?evalTimeout`), 2,000,000 triangles per result, and
   2,000,000 polygons created per evaluation. See [Code API](/reference/code-api#limits).
 - **Scene limits.** The tree is expanded to at most 32 levels and 5,000 occurrences.
 
 **Safety**
 
-- **No sandbox.** Project code runs in a Web Worker with the same powers as any script on the page. Opening a file with
-  code asks before running it, and that is the only protection.
+- **No sandbox.** JavaScript project code runs in a Web Worker with the same powers as any script on the page.
+  Opening a file with code asks before running it, and that is the only protection. OpenSCAD code is different: 3Dica
+  interprets it and never runs it as JavaScript, so it can only make shapes.
 
 **Interface**
 
@@ -186,7 +212,7 @@ These are the known limits of v0.1.
 
 **Files**
 
-- **No import** of STL, OpenSCAD, STEP, SVG, DXF or images.
+- **No import** of STL, STEP, SVG, DXF or images. OpenSCAD `.scad` files can be imported as OpenSCAD objects.
 - **STL only.** No 3MF, OBJ or GLB, and no colors in exports. Overlapping solids are not merged.
 - **One autosaved project per browser and address.** There is no project list or cloud sync, and all tabs share one
   autosave slot.
@@ -205,7 +231,7 @@ say so in an [issue](https://github.com/feiteira/3dica/issues).
   evaluating in parallel.
 - A real sandbox for project code, such as an isolated iframe.
 - Export to 3MF and OBJ, with colors.
-- Import of STL meshes, and of OpenSCAD code through openscad-wasm.
+- Import of STL meshes.
 - Shared helper modules that several objects can import.
 - Group parameters and parameters that flow from a group into its children.
 - Multi-select, a measuring tool and section planes.

@@ -69,7 +69,7 @@ export function setupApp() {
   } as unknown as ViewportApi
   const ctx: AppContext = {
     store, client, viewport, commands: {} as Commands, controller: null as never, clipboard: new Clipboard(),
-    files: { downloadBlob: (blob, name) => { downloads.push({ name, blob }) }, pickFile: async () => null, onWindowDrop: () => () => {} },
+    files: { downloadBlob: (blob, name) => { downloads.push({ name, blob }) }, pickFile: async () => null, pickFiles: async () => [], onWindowDrop: () => () => {} },
     toast: (m) => { toasts.push(m) }, confirm: async () => true, problems() {},
     on: events.on, emit: events.emit, params: readUrlParams('?fresh'),
   }

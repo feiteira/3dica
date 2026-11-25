@@ -1,8 +1,9 @@
 // §7 graph.ts + §5.1 expansion. Pure queries over a Project; nothing here mutates.
-import type { Definition, GroupDef, Id, Instance, InstancePath, Mat4, ParamValue, Project } from './types'
+import type { CodeDef, Definition, GroupDef, Id, Instance, InstancePath, Mat4, ParamValue, Project } from './types'
 import { IDENTITY_XF } from './types'
 import { identity, mul, toMatrix } from './transform'
 import { resolveParams } from './params'
+import { scadRefSites, scadRefs } from './scad'
 
 // ───────────────────────────── paths ─────────────────────────────
 
@@ -189,6 +190,19 @@ export function staticRefSites(code: string): { name: string; line: number; col:
   return out
 }
 
+/**
+ * The def names a code def's part() calls name (§3.1): JSCAD code through staticRefs; OpenSCAD code through a token
+ * scan of its code and of the attached files it uses or includes (none when it defines its own `module part`).
+ */
+export function defRefs(def: CodeDef): string[] {
+  return def.lang === 'openscad' ? scadRefs(def.code, def.files) : staticRefs(def.code)
+}
+
+/** defRefs with the 1-based line / col of each call in the def's own code (diagnostics). */
+export function defRefSites(def: CodeDef): { name: string; line: number; col: number }[] {
+  return def.lang === 'openscad' ? scadRefSites(def.code, def.files) : staticRefSites(def.code)
+}
+
 /** name → def (all defs, including the root "Scene"). */
 export function nameIndex(project: Project): Map<string, Definition> {
   const m = new Map<string, Definition>()
@@ -207,7 +221,7 @@ export function referrers(project: Project, defId: Id): Id[] {
   if (!def) return []
   const out: Id[] = []
   for (const d of Object.values(project.defs)) {
-    if (d.id !== defId && d.kind === 'code' && staticRefs(d.code).includes(def.name)) out.push(d.id)
+    if (d.id !== defId && d.kind === 'code' && defRefs(d).includes(def.name)) out.push(d.id)
   }
   return out.sort()
 }
@@ -260,7 +274,7 @@ export function occurrenceCount(project: Project, defId: Id): number {
 }
 
 /**
- * Outgoing edges of the def graph (§2.2): group → each child def (hidden too), code → each def named by staticRefs.
+ * Outgoing edges of the def graph (§2.2): group → each child def (hidden too), code → each def named by defRefs.
  * Unknown names are skipped. `codeEdges: false` gives the structural (group-only) graph.
  */
 export function defEdges(project: Project, defId: Id, opts: { codeEdges?: boolean; names?: Map<string, Definition> } = {}): Id[] {
@@ -270,7 +284,7 @@ export function defEdges(project: Project, defId: Id, opts: { codeEdges?: boolea
   if (opts.codeEdges === false) return []
   const names = opts.names ?? nameIndex(project)
   const out: Id[] = []
-  for (const n of staticRefs(d.code)) { const t = names.get(n); if (t && !out.includes(t.id)) out.push(t.id) }
+  for (const n of defRefs(d)) { const t = names.get(n); if (t && !out.includes(t.id)) out.push(t.id) }
   return out
 }
 

@@ -1,12 +1,13 @@
 // §7 core/ops.ts — draft-mutating project operations. Each is (draft: Project, …) => result and throws OpError(message)
 // with a user-facing message when refused; on throw the store discards the draft (§4.12), so partial mutation is harmless.
 // Every op that adds a child calls wouldCycle first.
-import type { Definition, GroupDef, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform } from './types'
+import type { CodeDef, Definition, GroupDef, GroupOp, Id, Instance, InstancePath, ParamDef, ParamValue, Project, Transform } from './types'
 import { IDENTITY_XF } from './types'
 import { newId, uniqueName, MAX_NAME } from './ids'
 import { cloneXf, fromMatrix, invert, isIdentityXf, isValidXf, matricesClose, mul, roundOpXf, toMatrix } from './transform'
-import { defAtPath, findInstance, instancesOf, isPrefix, referrers, resolvePath, staticRefs, wouldCycle, worldMatrix, type PathStep } from './graph'
+import { defAtPath, defRefs, findInstance, instancesOf, isPrefix, referrers, resolvePath, wouldCycle, worldMatrix, type PathStep } from './graph'
 import { isValidParamValue, paramDefProblems } from './params'
+import { checkScadPath, isScad, normalizeScadFiles, SCAD_PARAMS_HINT, scadChoiceOption, scadDefinesPart, scadFileProblem, scadParams, setScadDefault } from './scad'
 
 export class OpError extends Error {
   constructor(message: string) {
@@ -59,6 +60,12 @@ function getDef(d: Project, id: Id): Definition {
   return def
 }
 
+function getScad(d: Project, id: Id): CodeDef {
+  const def = getDef(d, id)
+  if (!isScad(def)) throw new OpError(`'${def.name}' is not an OpenSCAD object`)
+  return def
+}
+
 function getGroup(d: Project, id: Id): GroupDef {
   const def = getDef(d, id)
   if (def.kind !== 'group') throw new OpError(`'${def.name}' is not a group`)
@@ -107,12 +114,25 @@ function escapeRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '
 
 // ───────────────────────────── ops ─────────────────────────────
 
-/** Add a definition (id must be new, name valid and unique, params valid). Returns its id. */
+/**
+ * Add a definition (id must be new, name valid and unique, params valid). Returns its id. An OpenSCAD def gets its
+ * params derived from its code (whatever it brought) and its attached files checked.
+ */
 export function addDef(d: Project, def: Definition): Id {
   if (d.defs[def.id]) throw new OpError('Duplicate definition id')
   const problem = checkDefName(d, def.name)
   if (problem) throw new OpError(problem)
   if (def.kind === 'code') {
+    if (def.lang !== undefined && def.lang !== 'openscad') throw new OpError('Unknown code language')
+    if (def.lang === 'openscad') {
+      if (def.files !== undefined) {
+        const f = normalizeScadFiles(def.files)
+        if (f.problems.length) throw new OpError(f.problems[0])
+        if (f.files) def.files = f.files
+        else delete def.files
+      }
+      def.params = scadParams(def.code)
+    } else if (def.files !== undefined) throw new OpError('Only OpenSCAD objects have attached files')
     const p = paramDefProblems(def.params)
     if (p.length) throw new OpError(p[0])
   } else {
@@ -171,7 +191,10 @@ export function cloneDef(d: Project, defId: Id): Id {
   const name = uniqueName(src.name, Object.values(d.defs).map((x) => x.name))
   let clone: Definition
   if (src.kind === 'code') {
-    clone = { id, name, kind: 'code', code: src.code, params: structuredClone(src.params) }
+    const c: CodeDef = { id, name, kind: 'code', code: src.code, params: structuredClone(src.params) }
+    if (src.lang) c.lang = src.lang
+    if (src.files) c.files = { ...src.files }
+    clone = c
   } else {
     clone = { id, name, kind: 'group', op: src.op, children: src.children.map((c) => ({ ...structuredClone(c), id: newId('i') })) }
   }
@@ -297,7 +320,7 @@ export function purgeUnused(d: Project): number {
     const used = new Set<Id>()
     for (const g of Object.values(d.defs)) if (g.kind === 'group') for (const c of g.children) used.add(c.def)
     const names = new Set<string>()
-    for (const c of Object.values(d.defs)) if (c.kind === 'code') for (const n of staticRefs(c.code)) names.add(n)
+    for (const c of Object.values(d.defs)) if (c.kind === 'code') for (const n of defRefs(c)) names.add(n)
     const doomed = Object.values(d.defs).filter((x) => x.id !== d.root && !used.has(x.id) && !referencedByOthers(d, x, names))
     if (doomed.length === 0) return total
     for (const x of doomed) delete d.defs[x.id]
@@ -312,7 +335,9 @@ function referencedByOthers(d: Project, def: Definition, names: Set<string>): bo
 
 /**
  * Rename a def (§4.7): trims, validates (§2.2), then rewrites part('Old' / part("Old" in every code def to the new
- * name. Returns the ids of code defs whose code changed (the editor reloads if it shows one). No-op if unchanged.
+ * name — in OpenSCAD code also in its attached files, and not at all where the code defines its own `module part`
+ * (those calls are not 3Dica references). Returns the ids of code defs whose code (or files) changed (the editor
+ * reloads if it shows one). No-op if unchanged.
  */
 export function renameDef(d: Project, defId: Id, newName: string): Id[] {
   const def = getDef(d, defId)
@@ -324,11 +349,32 @@ export function renameDef(d: Project, defId: Id, newName: string): Id[] {
   const old = def.name
   def.name = name
   const re = new RegExp(`\\bpart\\(\\s*(['"])${escapeRe(old)}\\1`, 'g')
+  // OpenSCAD's scan reads tokens, so it also finds part ("Old" with a space before the parenthesis
+  const reScad = new RegExp(`\\bpart(\\s*)\\(\\s*(["'])${escapeRe(old)}\\2`, 'g')
   const changed: Id[] = []
+  const rewrite = (text: string) => text.replace(re, (_m, q: string) => `part(${q}${name}${q}`)
+  const rewriteScad = (text: string) => text.replace(reScad, (_m, sp: string, q: string) => `part${sp}(${q}${name}${q}`)
   for (const c of Object.values(d.defs)) {
     if (c.kind !== 'code') continue
-    const next = c.code.replace(re, (_m, q: string) => `part(${q}${name}${q}`)
-    if (next !== c.code) { c.code = next; changed.push(c.id) }
+    let touched = false
+    if (isScad(c)) {
+      if (scadDefinesPart(c.code, c.files)) continue
+      if (c.files) {
+        // a new map, never an in-place change: specs and scans cache by the map object
+        let files: Record<string, string> | null = null
+        for (const [path, text] of Object.entries(c.files)) {
+          const next = rewriteScad(text)
+          if (next !== text) { (files ??= { ...c.files })[path] = next; touched = true }
+        }
+        if (files) c.files = files
+      }
+    }
+    const next = isScad(c) ? rewriteScad(c.code) : rewrite(c.code)
+    if (next !== c.code) { c.code = next; touched = true }
+    if (touched) {
+      if (isScad(c)) c.params = scadParams(c.code)
+      changed.push(c.id)
+    }
   }
   return changed
 }
@@ -349,6 +395,12 @@ export function setTransform(d: Project, instanceId: Id, xf: Transform): void {
   instance.xf = cloneXf(xf)
 }
 
+/** "Invalid value for 'holes': it must be one of "0", "1", "2"" (the part() error says the same). */
+function invalidValue(pd: ParamDef): string {
+  const what = pd.type === 'number' ? 'a finite number' : pd.type === 'boolean' ? 'true or false' : 'one of ' + (pd.options ?? []).map((o) => JSON.stringify(o)).join(', ')
+  return `Invalid value for '${pd.name}': it must be ${what}`
+}
+
 /**
  * Set (or with undefined, remove) a parameter override on an instance of a code def (§4.10).
  * The value must suit the ParamDef. Removing a stale (undeclared) key is allowed; setting one is not.
@@ -366,7 +418,9 @@ export function setOverride(d: Project, instanceId: Id, name: string, value: Par
   if (def.kind !== 'code') throw new OpError('Groups have no parameters')
   const pd = def.params.find((p) => p.name === name)
   if (!pd) throw new OpError(`'${def.name}' has no parameter '${name}'`)
-  if (!isValidParamValue(pd, value)) throw new OpError(`Invalid value for '${name}'`)
+  // an OpenSCAD dropdown also takes its item's value (holes = 3 for // [0, 1, 2, 3]; 30 for // [10:Small, 30:Large])
+  if (pd.type === 'choice' && isScad(def) && !isValidParamValue(pd, value)) value = scadChoiceOption(def.code, name, value) ?? value
+  if (!isValidParamValue(pd, value)) throw new OpError(invalidValue(pd))
   instance.params = { ...(instance.params ?? {}), [name]: value }
 }
 
@@ -407,15 +461,59 @@ export function setCode(d: Project, defId: Id, code: string): void {
   const def = getDef(d, defId)
   if (def.kind !== 'code') throw new OpError(`'${def.name}' is a group and has no code`)
   def.code = String(code)
+  // OpenSCAD: the code is the single source of truth for the parameters (Customizer style)
+  if (isScad(def)) def.params = scadParams(def.code)
 }
 
-/** Replace a code def's ParamDef list (the defaults table, §4.10). Refused with the first problem when invalid. */
+/**
+ * Replace a code def's ParamDef list (the defaults table, §4.10). Refused with the first problem when invalid, and
+ * for OpenSCAD objects, whose parameters come from their code (SCAD_PARAMS_HINT).
+ */
 export function setParamDefs(d: Project, defId: Id, params: ParamDef[]): void {
   const def = getDef(d, defId)
   if (def.kind !== 'code') throw new OpError('Groups have no parameters')
+  if (def.lang === 'openscad') throw new OpError(SCAD_PARAMS_HINT)
   const problems = paramDefProblems(params)
   if (problems.length) throw new OpError(problems[0])
   def.params = structuredClone(params)
+}
+
+/**
+ * The default of an OpenSCAD object's parameter: rewrites the literal of its top-level assignment in the code
+ * (only the literal changes) and derives the params again. The value must suit the ParamDef.
+ */
+export function setScadParamDefault(d: Project, defId: Id, name: string, value: ParamValue): void {
+  const def = getScad(d, defId)
+  const pd = def.params.find((p) => p.name === name)
+  if (!pd) throw new OpError(`'${def.name}' has no parameter '${name}'`)
+  if (pd.type === 'choice' && !isValidParamValue(pd, value)) value = scadChoiceOption(def.code, name, value) ?? value
+  if (!isValidParamValue(pd, value)) throw new OpError(invalidValue(pd))
+  const next = setScadDefault(def.code, name, value)
+  if (next === null) throw new OpError(`Can't change '${name}' in the code of '${def.name}'`)
+  def.code = next
+  def.params = scadParams(next)
+}
+
+/** Attach (or replace) a file of an OpenSCAD object, named by its relative path ('lib/gear.scad'). Returns the stored path. */
+export function attachScadFile(d: Project, defId: Id, path: string, text: string): string {
+  const def = getScad(d, defId)
+  const c = checkScadPath(path)
+  if ('problem' in c) throw new OpError(c.problem[0].toUpperCase() + c.problem.slice(1))
+  const problem = scadFileProblem(def.files, c.path, text)
+  if (problem) throw new OpError(problem)
+  def.files = { ...(def.files ?? {}), [c.path]: text }
+  def.params = scadParams(def.code)
+  return c.path
+}
+
+/** Remove an attached file of an OpenSCAD object. */
+export function removeScadFile(d: Project, defId: Id, path: string): void {
+  const def = getScad(d, defId)
+  if (!def.files || !Object.hasOwn(def.files, path)) throw new OpError(`'${def.name}' has no attached file '${path}'`)
+  const files = { ...def.files }
+  delete files[path]
+  if (Object.keys(files).length) def.files = files
+  else delete def.files
 }
 
 /** Group op selector (§4.10). The root must stay 'none'. */

@@ -4,6 +4,26 @@ If you know OpenSCAD, you already know most of 3Dica. The main shift is that **a
 scene, while in 3Dica every object is its own small program**. The tree decides where each copy goes. You still write
 code for shapes, but placement, copies, booleans between parts and "show me just this one" become things you click.
 
+## Keep your OpenSCAD code
+
+You don't have to translate. **Import** in the toolbar (or dropping `.scad` files on the window) adds each file as an
+**OpenSCAD object**: its code stays OpenSCAD, and 3Dica's built-in interpreter runs it, following OpenSCAD 2021.01.
+Choose a file together with the files it uses or includes, and they are attached to it. The **OpenSCAD** toolbar
+button starts a blank one.
+
+- **Parameters work like the Customizer.** Top-level variables set to a number or `true`/`false`, or to a string with
+  a list of options, become the object's parameters, and comments such as `// [10:100]` give them sliders and
+  drop-downs. Each copy can override them, and a default you change in the Inspector is written back into the code.
+- **`part("Name", width = 20);`** places another 3Dica object, and JavaScript code can `part()` an OpenSCAD object.
+- **The editor shows OpenSCAD's console:** `echo()` lines and warnings appear in the **Output** panel under the code.
+- **Not supported:** `import()`, `surface()` and DXF files. `text()` uses a built-in single-stroke font, sized and
+  spaced like OpenSCAD's default font, so the letter shapes differ.
+
+[OpenSCAD objects](/guide/openscad) explains all of this, and [OpenSCAD support](/reference/openscad) lists every
+built-in module and function. The two kinds of object can `part()` each other, so one project can mix them.
+
+The rest of this page is about writing objects in JavaScript (JSCAD).
+
 ## Concepts side by side
 
 | OpenSCAD | 3Dica |
@@ -23,7 +43,7 @@ code for shapes, but placement, copies, booleans between parts and "show me just
 | Customizer (`// [0:100]` comments) | The definition's **parameter table**: number (with min, max and step for a slider), boolean (checkbox) or choice (drop-down). Each instance can override any of them. |
 | `echo(x)` | `console.log(x)`. The output goes to the browser's developer console. |
 | `assert(cond, "msg")` | `if (!cond) throw new Error('msg')`. The message shows in the code editor's gutter and status line, and the tree row gets a red dot. |
-| `include <…>` · `use <…>` | No equivalent. A project is one file, and `part()` reuses definitions in the same project. |
+| `include <…>` · `use <…>` | No equivalent in JavaScript code: `part()` reuses definitions in the same project. An [OpenSCAD object](/guide/openscad#attached-files) can use and include files attached to it. |
 | F5 / F6 render | No separate preview and render step. Every change re-evaluates only what it affects, in a Web Worker. Code edits run 0.4 s after you stop typing, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (or **Run** above the editor) runs them right away. |
 
 ## Shapes and operations
@@ -127,7 +147,10 @@ string literal, so that 3Dica can see the dependency.
 
 ## What doesn't carry over
 
-- **No libraries.** You can't include BOSL2 or MCAD. Each definition sees JSCAD and `part()`.
+In JavaScript (JSCAD) objects:
+
+- **No libraries.** You can't include BOSL2 or MCAD in JavaScript code. Each definition sees JSCAD and `part()`.
+  An OpenSCAD object can use or include library files you attach to it.
 - **No shared functions between objects.** A helper function lives inside one definition's code. Reuse geometry
   with `part()`, not code.
 - **No `children()`.** A group holds its own child instances. You can't pass children into a definition.

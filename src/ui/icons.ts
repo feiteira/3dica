@@ -54,6 +54,12 @@ const PATHS: Record<string, string> = {
   external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
   spark: '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/>',
+  // ── OpenSCAD objects (toolbar Import, inspector files)
+  scad: '<path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M14.8 9.4c-.5-.9-1.5-1.4-2.8-1.4-1.6 0-2.8.8-2.8 2 0 2.7 5.6 1.4 5.6 4.1 0 1.2-1.2 2-2.8 2-1.3 0-2.3-.5-2.8-1.4"/>',
+  import: '<path d="M14 3H7a1 1 0 0 0-1 1v4M6 16v4a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M2 12h10M9 9l3 3-3 3"/>',
+  file: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/>',
+  download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/>',
+  attach: '<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>',
 }
 
 export type IconName = keyof typeof PATHS
@@ -75,9 +81,9 @@ export function icon(name: IconName | string, cls = 'icon'): SVGSVGElement {
   return svg
 }
 
-/** Icon name for a definition kind / group op. */
-export function defIconName(def: { kind: 'code' | 'group'; op?: string }): IconName {
-  if (def.kind === 'code') return 'code'
+/** Icon name for a definition kind / group op (OpenSCAD objects get their own). */
+export function defIconName(def: { kind: 'code' | 'group'; op?: string; lang?: string }): IconName {
+  if (def.kind === 'code') return def.lang === 'openscad' ? 'scad' : 'code'
   if (def.op === 'union') return 'union'
   if (def.op === 'subtract') return 'subtract'
   if (def.op === 'intersect') return 'intersect'
